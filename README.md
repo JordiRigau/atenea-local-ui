@@ -2,6 +2,16 @@
 
 Sincronitzador automàtic dels documents d'[Atenea (Moodle UPC)](https://atenea.upc.edu) i visor web local en català, 100% offline i sense dependències externes.
 
+### Captures de pantalla
+
+**Vista d'assignatura amb previsualització lateral i desplegables intel·ligents (mode clar)**
+
+![Vista d'assignatura en mode clar](docs/preview-light.png)
+
+**Vista de novetats i estat de sincronització (mode fosc)**
+
+![Vista de novetats en mode fosc](docs/preview-dark.png)
+
 ## Funcions principals
 
 - **Sincronització diària (`sync_atenea.py`)**: descarrega apunts, carpetes, enunciats de tasques, pàgines HTML i enllaços `.url` organitzats per assignatura i secció dins d'`Assignatures/`. Si un professor esborra un fitxer d'Atenea, la còpia local es conserva.
@@ -39,6 +49,7 @@ Sincronitzador automàtic dels documents d'[Atenea (Moodle UPC)](https://atenea.
 3. **Obre el visor**:
    - **Mode estàtic**: fes doble clic a `index.html`.
    - **Mode servidor local (recomanat)**: fes doble clic a `obrir_atenea.bat` (o executa `python serve.py`).
+   - **Drecera d'escriptori a Windows (sense consola)**: pots crear un accés directe apuntant a `pythonw.exe` amb argument `"C:\ruta\a\serve.py"` i la icona `atenea.ico` inclosa al repositori (`serve.py` també la serveix com a favicon).
 
 ## Automatització diària a Windows
 

@@ -32,6 +32,7 @@ import build_index
 ROOT = Path(__file__).resolve().parent
 DOCS_DIR = (ROOT / "Assignatures").resolve()
 INDEX_FILE = ROOT / "index.html"
+ICON_FILE = ROOT / "atenea.ico"
 CATALOG_FILE = ROOT / "catalog.js"
 SYNC_SCRIPT = ROOT / "run_sync.ps1"
 LOG_FILE = ROOT / "sync.log"
@@ -200,7 +201,7 @@ class AteneaHandler(BaseHTTPRequestHandler):
 
     def log_message(self, format: str, *args) -> None:
         # Silencia access logs verbosos llevat d'errors
-        if args and len(args) >= 2 and str(args[1]).startswith(("4", "5")):
+        if sys.stderr is not None and args and len(args) >= 2 and str(args[1]).startswith(("4", "5")):
             super().log_message(format, *args)
 
     def _send_json(self, status: int, obj: object) -> None:
@@ -323,6 +324,20 @@ class AteneaHandler(BaseHTTPRequestHandler):
                 self._send_json(HTTPStatus.NOT_FOUND, {"ok": False, "error": "index.html no trobat"})
                 return
             self._send_bytes(HTTPStatus.OK, INDEX_FILE.read_bytes(), "text/html; charset=utf-8")
+            return
+
+        if req_path in ("/favicon.ico", "/atenea.ico"):
+            if not ICON_FILE.exists():
+                self.send_response(HTTPStatus.NO_CONTENT)
+                self.end_headers()
+                return
+            icon_bytes = ICON_FILE.read_bytes()
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "image/x-icon")
+            self.send_header("Content-Length", str(len(icon_bytes)))
+            self.send_header("Cache-Control", "public, max-age=86400")
+            self.end_headers()
+            self.wfile.write(icon_bytes)
             return
 
         if req_path == "/catalog.js":
@@ -450,6 +465,11 @@ def create_server(preferred_port: int) -> tuple[ThreadingHTTPServer, int]:
 
 
 def main() -> None:
+    if sys.stdout is None:
+        sys.stdout = open(os.devnull, "w", encoding="utf-8")
+    if sys.stderr is None:
+        sys.stderr = open(os.devnull, "w", encoding="utf-8")
+
     parser = argparse.ArgumentParser(description="Servidor local d'Atenea")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     parser.add_argument("--no-browser", action="store_true")
