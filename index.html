@@ -1,0 +1,1776 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Atenea — Arxius locals</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<script>
+(function(){
+  try {
+    var t = localStorage.getItem("atenea_theme");
+    if (t === "dark" || t === "light") document.documentElement.setAttribute("data-theme", t);
+  } catch (e) {}
+})();
+</script>
+<style>
+:root{
+  --paper:#F3F5F8; --surface:#FFFFFF; --surface-2:#F8FAFC; --ink:#17202A; --muted:#5A6672; --line:#D8DEE5; --accent:#2340C9;
+  --ok:#1F8A4C; --warn:#C92A2A; --star:#D97706;
+  --f-display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body:"IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono:"IBM Plex Mono", ui-monospace, Consolas, monospace;
+  --c:var(--accent);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#11161C; --surface:#19212A; --surface-2:#141B23; --ink:#E6EBF0; --muted:#97A3AF; --line:#2B3640; --accent:#8FA2FF;
+    --ok:#4ADE80; --warn:#F87171; --star:#FBBF24; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#11161C; --surface:#19212A; --surface-2:#141B23; --ink:#E6EBF0; --muted:#97A3AF; --line:#2B3640; --accent:#8FA2FF;
+  --ok:#4ADE80; --warn:#F87171; --star:#FBBF24; color-scheme:dark;
+}
+:root[data-theme="light"]{ color-scheme:light; }
+
+*{ box-sizing:border-box; }
+html,body{ height:100%; margin:0; }
+body{
+  background:var(--paper); color:var(--ink);
+  font-family:var(--f-body); font-size:14px; line-height:1.45;
+  overflow:hidden;
+}
+button,input,select{ font:inherit; color:inherit; }
+button{ cursor:pointer; }
+a{ color:var(--accent); }
+a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{
+  outline:2px solid var(--accent); outline-offset:2px;
+}
+
+.mono{ font-family:var(--f-mono); font-variant-numeric:tabular-nums; }
+.eyebrow{ font-family:var(--f-mono); font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); }
+
+/* App Shell */
+.app{
+  display:grid;
+  grid-template-columns:276px minmax(0,1fr);
+  grid-template-rows:auto minmax(0,1fr);
+  grid-template-areas:
+    "sidebar topbar"
+    "sidebar main";
+  height:100vh;
+  width:100%;
+}
+.app.has-preview{
+  grid-template-columns:276px minmax(360px,1fr) minmax(420px,46%);
+  grid-template-areas:
+    "sidebar topbar topbar"
+    "sidebar main preview";
+}
+.app.has-preview.wide-preview{
+  grid-template-columns:276px minmax(260px,34%) minmax(500px,1fr);
+  grid-template-areas:
+    "sidebar topbar topbar"
+    "sidebar main preview";
+}
+
+/* Sidebar */
+.sidebar{
+  grid-area:sidebar;
+  background:var(--surface);
+  border-right:1px solid var(--line);
+  display:flex; flex-direction:column;
+  min-height:0;
+  overflow:hidden;
+}
+.sb-head{
+  padding:18px 16px 14px;
+  border-bottom:1px solid var(--line);
+}
+.sb-brand{
+  display:flex; align-items:center; justify-content:space-between; gap:8px;
+}
+.sb-brand h1{
+  font-family:var(--f-display); font-size:24px; font-weight:700;
+  margin:0; line-height:1.1; letter-spacing:-.01em;
+}
+.mode-pill{
+  font-family:var(--f-mono); font-size:10px; text-transform:uppercase; letter-spacing:.06em;
+  padding:2px 7px; border-radius:99px; border:1px solid var(--line); color:var(--muted);
+}
+.mode-pill.live{
+  color:var(--ok); border-color:color-mix(in srgb,var(--ok) 45%,transparent);
+  background:color-mix(in srgb,var(--ok) 10%,transparent);
+}
+.sb-stats{ margin-top:6px; font-size:11.5px; color:var(--muted); font-family:var(--f-mono); }
+
+.sb-scroll{
+  flex:1; overflow-y:auto; padding:12px 10px;
+  display:flex; flex-direction:column; gap:16px;
+}
+.nav-group{ display:flex; flex-direction:column; gap:2px; }
+.nav-label{
+  padding:0 8px 4px; font-family:var(--f-mono); font-size:10.5px;
+  text-transform:uppercase; letter-spacing:.08em; color:var(--muted);
+}
+.nav-btn{
+  display:flex; align-items:center; gap:9px; width:100%;
+  background:transparent; border:1px solid transparent; border-radius:6px;
+  padding:7px 9px; text-align:left; font-size:13.5px; color:var(--ink);
+  transition:background .12s, border-color .12s;
+}
+.nav-btn:hover{ background:var(--surface-2); }
+.nav-btn.active{
+  background:color-mix(in srgb,var(--c) 12%,var(--surface));
+  border-color:color-mix(in srgb,var(--c) 35%,transparent);
+  font-weight:600;
+}
+.nav-btn .ico{ width:16px; text-align:center; flex:none; font-size:13px; opacity:.85; }
+.nav-btn .dot{ width:9px; height:9px; border-radius:50%; background:var(--c); flex:none; }
+.nav-btn .lbl{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.nav-btn .subcode{ font-family:var(--f-mono); font-size:10.5px; color:var(--muted); display:block; line-height:1.1; font-weight:400; }
+.nav-btn .badge{
+  font-family:var(--f-mono); font-size:11px; color:var(--muted);
+  padding:1px 6px; border-radius:99px; background:var(--paper);
+}
+.nav-btn .new-dot{
+  width:7px; height:7px; border-radius:50%; background:var(--c); flex:none;
+}
+
+.sb-foot{
+  border-top:1px solid var(--line);
+  padding:10px 14px;
+  background:var(--surface-2);
+}
+.sync-card{
+  display:flex; flex-direction:column; gap:1px;
+  font-size:12px; text-align:right; line-height:1.25;
+}
+.sync-row{ display:inline-flex; align-items:center; justify-content:flex-end; gap:6px; font-weight:500; white-space:nowrap; }
+.status-dot{ width:8px; height:8px; border-radius:50%; flex:none; background:var(--muted); }
+.status-dot.ok{ background:var(--ok); }
+.status-dot.err{ background:var(--warn); }
+.sync-meta{ color:var(--muted); font-size:11px; white-space:nowrap; }
+.sync-err-banner{
+  padding:6px 10px; border-radius:6px;
+  background:color-mix(in srgb,var(--warn) 11%,var(--surface));
+  border:1px solid color-mix(in srgb,var(--warn) 38%,transparent);
+  color:var(--warn); font-size:12px; word-break:break-word;
+}
+.btn{
+  display:inline-flex; align-items:center; justify-content:center; gap:6px;
+  padding:6px 10px; border-radius:6px; border:1px solid var(--line);
+  background:var(--surface); color:var(--ink); font-size:12.5px; font-weight:500;
+  text-decoration:none; white-space:nowrap;
+  transition:border-color .12s, background .12s;
+}
+.btn:hover{ border-color:var(--muted); background:var(--paper); }
+.btn.primary{
+  background:var(--accent); border-color:var(--accent); color:#FFFFFF;
+}
+:root[data-theme="dark"] .btn.primary{ color:#11161C; }
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]) .btn.primary{ color:#11161C; }
+}
+.btn.primary:hover{ opacity:.92; }
+.btn:disabled{ opacity:.6; cursor:not-allowed; }
+.static-hint{ font-size:11px; color:var(--muted); line-height:1.35; }
+.static-hint code{ font-family:var(--f-mono); font-size:10.5px; }
+
+.spinner{
+  width:12px; height:12px; border:2px solid currentColor;
+  border-top-color:transparent; border-radius:50%;
+  display:inline-block; animation:spin .75s linear infinite;
+}
+@keyframes spin{ to{ transform:rotate(360deg); } }
+
+/* Topbar & Main column */
+.topbar{
+  grid-area:topbar;
+  background:var(--surface);
+  border-bottom:1px solid var(--line);
+  padding:11px 18px;
+  display:flex; flex-direction:column; gap:9px;
+}
+.main{
+  grid-area:main;
+  display:flex; flex-direction:column; min-width:0; min-height:0;
+}
+.search-row{
+  display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+}
+.menu-btn{
+  display:none; padding:7px 10px; border-radius:6px;
+  border:1px solid var(--line); background:var(--surface-2); font-size:15px; flex:none;
+}
+.search-box{
+  position:relative; flex:0 1 340px; max-width:360px; min-width:190px;
+  display:flex; align-items:center;
+}
+.top-right{
+  margin-left:auto;
+  display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+}
+.search-box .search-ico{
+  position:absolute; left:11px; color:var(--muted); pointer-events:none; font-size:13px;
+}
+.search-box input{
+  width:100%; padding:8px 60px 8px 32px;
+  border:1px solid var(--line); border-radius:7px;
+  background:var(--paper); font-size:14px;
+}
+.search-box input:focus{ border-color:var(--accent); background:var(--surface); outline:none; }
+.search-box .kbd{
+  position:absolute; right:10px; font-family:var(--f-mono); font-size:11px;
+  color:var(--muted); border:1px solid var(--line); border-radius:4px;
+  padding:1px 5px; background:var(--surface); pointer-events:none;
+}
+.search-box .clear-btn{
+  position:absolute; right:8px; border:none; background:transparent;
+  color:var(--muted); font-size:16px; padding:2px 6px; display:none;
+}
+.search-box.has-val .kbd{ display:none; }
+.search-box.has-val .clear-btn{ display:block; }
+
+.chips-row{
+  display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;
+}
+.chips{ display:flex; gap:6px; flex-wrap:wrap; }
+.chip{
+  display:inline-flex; align-items:center; gap:5px;
+  padding:4px 10px; border-radius:99px; border:1px solid var(--line);
+  background:var(--surface); font-size:12px; color:var(--muted);
+}
+.chip:hover{ color:var(--ink); border-color:var(--muted); }
+.chip.active{
+  background:var(--ink); color:var(--surface); border-color:var(--ink); font-weight:500;
+}
+.chip .cnt{ font-family:var(--f-mono); font-size:11px; opacity:.8; }
+
+.view-bar{
+  display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
+  padding:10px 18px;
+  border-bottom:1px solid var(--line);
+  background:var(--paper);
+}
+.view-title-wrap{ display:flex; align-items:center; gap:10px; min-width:0; }
+.view-bar .subj-bar{ width:4px; height:22px; border-radius:2px; background:var(--c); flex:none; }
+.view-title{
+  font-family:var(--f-display); font-size:19px; font-weight:700; margin:0; line-height:1.15;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.view-count{ font-family:var(--f-mono); font-size:12px; color:var(--muted); white-space:nowrap; }
+.view-tools{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.select{
+  padding:5px 8px; border-radius:6px; border:1px solid var(--line);
+  background:var(--surface); font-size:12.5px;
+}
+
+.content{
+  flex:1; overflow-y:auto; padding:14px 18px 40px;
+  min-height:0;
+}
+
+/* Tree / Sections */
+.section-card{
+  background:var(--surface);
+  border:1px solid var(--line);
+  border-radius:7px;
+  margin-bottom:10px;
+  overflow:hidden;
+}
+.section-head{
+  width:100%; display:flex; align-items:center; gap:9px;
+  padding:10px 13px; border:none; background:var(--surface);
+  text-align:left; font-weight:600; font-size:13.5px;
+  border-left:3px solid var(--c);
+}
+.section-head:hover{ background:var(--surface-2); }
+.chev{ font-family:var(--f-mono); font-size:11px; color:var(--muted); width:12px; text-align:center; flex:none; transition:transform .12s; }
+.collapsed > .section-head .chev,
+.folder-node.collapsed > .folder-head .chev{ transform:rotate(-90deg); }
+.section-head .sec-name{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.section-head .sec-cnt{ font-family:var(--f-mono); font-size:11.5px; color:var(--muted); font-weight:400; }
+
+.section-body{ border-top:1px solid var(--line); }
+.section-card.collapsed .section-body{ display:none; }
+
+.folder-node{ border-top:1px solid color-mix(in srgb,var(--line) 60%,transparent); }
+.folder-node:first-child{ border-top:none; }
+.folder-head{
+  width:100%; display:flex; align-items:center; gap:7px;
+  padding:7px 13px 7px calc(14px + var(--depth, 0) * 16px);
+  border:none; background:var(--surface-2);
+  text-align:left; font-size:12.5px; font-weight:600; color:var(--ink);
+}
+.folder-head:hover{ background:color-mix(in srgb,var(--c) 8%,var(--surface-2)); }
+.folder-head .f-cnt{ margin-left:auto; font-family:var(--f-mono); font-size:11px; color:var(--muted); font-weight:400; }
+.folder-node.collapsed > .folder-body{ display:none; }
+
+/* File row */
+.file-row{
+  display:flex; align-items:center; gap:10px;
+  padding:8px 13px 8px calc(13px + var(--depth, 0) * 16px);
+  border-top:1px solid color-mix(in srgb,var(--line) 55%,transparent);
+  cursor:pointer;
+  transition:background .1s;
+}
+.section-body > .file-row:first-child,
+.flat-list > .file-row:first-child{ border-top:none; }
+.file-row:hover{ background:color-mix(in srgb,var(--c) 7%,var(--surface)); }
+.file-row.selected{
+  background:color-mix(in srgb,var(--c) 14%,var(--surface));
+  box-shadow:inset 3px 0 0 var(--c);
+}
+
+.kind-pill{
+  font-family:var(--f-mono); font-size:10px; font-weight:500;
+  padding:2px 6px; border-radius:4px; min-width:44px; text-align:center;
+  flex:none; border:1px solid transparent; letter-spacing:.03em;
+}
+.k-pdf{ color:#C92A2A; background:color-mix(in srgb,#C92A2A 11%,transparent); border-color:color-mix(in srgb,#C92A2A 25%,transparent); }
+.k-url{ color:#1C7ED6; background:color-mix(in srgb,#1C7ED6 11%,transparent); border-color:color-mix(in srgb,#1C7ED6 25%,transparent); }
+.k-html{ color:#7048E8; background:color-mix(in srgb,#7048E8 11%,transparent); border-color:color-mix(in srgb,#7048E8 25%,transparent); }
+.k-video{ color:#0C8599; background:color-mix(in srgb,#0C8599 11%,transparent); border-color:color-mix(in srgb,#0C8599 25%,transparent); }
+.k-image{ color:#2B8A3E; background:color-mix(in srgb,#2B8A3E 11%,transparent); border-color:color-mix(in srgb,#2B8A3E 25%,transparent); }
+.k-office{ color:#B58800; background:color-mix(in srgb,#B58800 12%,transparent); border-color:color-mix(in srgb,#B58800 28%,transparent); }
+.k-code{ color:#D9480F; background:color-mix(in srgb,#D9480F 11%,transparent); border-color:color-mix(in srgb,#D9480F 25%,transparent); }
+.k-archive,.k-other{ color:var(--muted); background:var(--paper); border-color:var(--line); }
+
+:root[data-theme="dark"] .k-pdf{ color:#FF8787; }
+:root[data-theme="dark"] .k-url{ color:#74C0FC; }
+:root[data-theme="dark"] .k-html{ color:#B197FC; }
+:root[data-theme="dark"] .k-video{ color:#66D9E8; }
+:root[data-theme="dark"] .k-image{ color:#8CE99A; }
+:root[data-theme="dark"] .k-office{ color:#FFD43B; }
+:root[data-theme="dark"] .k-code{ color:#FFA94D; }
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]) .k-pdf{ color:#FF8787; }
+  :root:not([data-theme="light"]) .k-url{ color:#74C0FC; }
+  :root:not([data-theme="light"]) .k-html{ color:#B197FC; }
+  :root:not([data-theme="light"]) .k-video{ color:#66D9E8; }
+  :root:not([data-theme="light"]) .k-image{ color:#8CE99A; }
+  :root:not([data-theme="light"]) .k-office{ color:#FFD43B; }
+  :root:not([data-theme="light"]) .k-code{ color:#FFA94D; }
+}
+
+.file-info{ flex:1; min-width:0; }
+.file-title{
+  display:flex; align-items:center; gap:6px; min-width:0;
+}
+.file-name{
+  font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.tag{
+  font-family:var(--f-mono); font-size:9.5px; font-weight:500;
+  padding:1px 5px; border-radius:3px; text-transform:uppercase; flex:none;
+}
+.tag-new{ background:color-mix(in srgb,var(--ok) 16%,transparent); color:var(--ok); }
+.tag-upd{ background:color-mix(in srgb,var(--accent) 16%,transparent); color:var(--accent); }
+.tag-local{ background:var(--paper); color:var(--muted); border:1px solid var(--line); }
+
+.file-sub{
+  font-size:11.5px; color:var(--muted); margin-top:1px;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  display:flex; align-items:center; gap:6px;
+}
+.subj-dot{ width:7px; height:7px; border-radius:50%; background:var(--c); flex:none; display:inline-block; }
+
+.file-meta{
+  display:flex; align-items:center; gap:10px; flex:none;
+  font-family:var(--f-mono); font-size:11.5px; color:var(--muted);
+}
+.file-size{ min-width:56px; text-align:right; }
+.file-date{ min-width:74px; text-align:right; }
+
+.file-acts{
+  display:flex; align-items:center; gap:3px; flex:none;
+}
+.icon-btn{
+  width:27px; height:27px; display:inline-flex; align-items:center; justify-content:center;
+  border:1px solid transparent; border-radius:5px; background:transparent;
+  color:var(--muted); font-size:13px; text-decoration:none; padding:0;
+}
+.icon-btn:hover{
+  background:var(--surface); border-color:var(--line); color:var(--ink);
+}
+.icon-btn.starred{ color:var(--star); }
+
+.flat-list{
+  background:var(--surface); border:1px solid var(--line); border-radius:7px; overflow:hidden;
+}
+
+.date-group{ margin-bottom:14px; }
+.date-head{
+  font-family:var(--f-mono); font-size:11.5px; text-transform:uppercase; letter-spacing:.06em;
+  color:var(--muted); margin:0 0 6px 2px; display:flex; align-items:center; justify-content:space-between;
+}
+
+.banner{
+  background:var(--surface); border:1px solid var(--line); border-left:4px solid var(--accent);
+  border-radius:7px; padding:14px 16px; margin-bottom:12px;
+  display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
+}
+.empty{
+  background:var(--surface); border:1px dashed var(--line); border-radius:7px;
+  padding:32px 20px; text-align:center; color:var(--muted);
+}
+.empty h3{ font-family:var(--f-display); color:var(--ink); margin:0 0 6px; font-size:17px; }
+
+/* Preview Pane */
+.preview{
+  grid-area:preview;
+  display:none;
+  background:var(--surface);
+  border-left:1px solid var(--line);
+  flex-direction:column;
+  min-width:0; min-height:0;
+}
+.app.has-preview .preview{ display:flex; }
+.pv-head{
+  padding:12px 14px;
+  border-bottom:1px solid var(--line);
+  display:flex; flex-direction:column; gap:8px;
+  background:var(--surface-2);
+}
+.pv-top{ display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+.pv-meta{ min-width:0; }
+.pv-crumb{
+  display:flex; align-items:center; gap:6px; font-size:11.5px; color:var(--muted);
+  margin-bottom:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.pv-subj{
+  font-family:var(--f-mono); font-size:11px; padding:1px 7px; border-radius:99px;
+  background:color-mix(in srgb,var(--c) 14%,transparent); color:var(--c); font-weight:500;
+}
+.pv-title{
+  font-family:var(--f-display); font-size:16px; font-weight:700; margin:0;
+  word-break:break-word; line-height:1.25;
+}
+.pv-acts{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.pv-body{
+  flex:1; min-height:0; overflow:auto; position:relative;
+  background:var(--paper);
+}
+.pv-frame{ width:100%; height:100%; border:none; display:block; background:#FFFFFF; }
+.pv-media{
+  height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  padding:20px; gap:12px;
+}
+.pv-media img{ max-width:100%; max-height:calc(100% - 20px); border-radius:6px; box-shadow:0 2px 12px rgba(0,0,0,.15); }
+.pv-media video{ max-width:100%; max-height:calc(100% - 44px); border-radius:6px; background:#000; }
+.pv-code{
+  margin:0; padding:16px; font-family:var(--f-mono); font-size:12.5px; line-height:1.5;
+  white-space:pre-wrap; word-break:break-word; background:var(--surface); min-height:100%;
+}
+.pv-card{
+  margin:24px auto; max-width:460px; background:var(--surface);
+  border:1px solid var(--line); border-radius:8px; padding:22px;
+  display:flex; flex-direction:column; gap:12px;
+}
+.pv-card dl{
+  display:grid; grid-template-columns:auto 1fr; gap:6px 12px; margin:0; font-size:12.5px;
+}
+.pv-card dt{ color:var(--muted); }
+.pv-card dd{ margin:0; word-break:break-all; }
+.pv-note{ font-size:12px; color:var(--muted); text-align:center; margin:0; }
+
+/* Toast */
+.toast{
+  position:fixed; bottom:18px; left:50%; transform:translateX(-50%) translateY(16px);
+  background:var(--ink); color:var(--surface);
+  padding:8px 14px; border-radius:99px; font-size:13px; font-weight:500;
+  opacity:0; pointer-events:none; transition:opacity .18s, transform .18s;
+  z-index:100; box-shadow:0 6px 20px rgba(0,0,0,.22);
+}
+.toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+
+.backdrop{ display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:40; }
+
+/* Responsive */
+@media (max-width:1023px){
+  .app, .app.has-preview, .app.has-preview.wide-preview{
+    grid-template-columns:260px minmax(0,1fr);
+    grid-template-areas:
+      "sidebar topbar"
+      "sidebar main";
+  }
+  .app.has-preview .preview{
+    position:fixed; top:0; right:0; bottom:0; width:min(94vw, 620px); z-index:60;
+    box-shadow:-8px 0 30px rgba(0,0,0,.25);
+  }
+  .btn-wide-toggle{ display:none; }
+}
+@media (max-width:860px){
+  .app, .app.has-preview, .app.has-preview.wide-preview{
+    grid-template-columns:1fr;
+    grid-template-areas:
+      "topbar"
+      "main";
+  }
+  .menu-btn{ display:inline-flex; }
+  .sidebar{
+    position:fixed; top:0; left:0; bottom:0; width:280px; z-index:50;
+    transform:translateX(-100%); transition:transform .2s ease;
+  }
+  .sidebar.open{ transform:translateX(0); }
+  .backdrop.show{ display:block; }
+  .file-date{ display:none; }
+}
+@media (max-width:640px){
+  .search-box{ flex:1 1 100%; max-width:none; }
+  .top-right{ margin-left:0; width:100%; justify-content:space-between; }
+  .sync-card{ text-align:left; }
+  .sync-row{ justify-content:flex-start; }
+}
+@media (max-width:560px){
+  .file-size{ display:none; }
+  .topbar, .view-bar, .content{ padding-left:12px; padding-right:12px; }
+}
+</style>
+</head>
+<body>
+
+<div id="app" class="app">
+  <aside id="sidebar" class="sidebar" aria-label="Navegació">
+    <div class="sb-head">
+      <div class="sb-brand">
+        <h1>Atenea</h1>
+        <span id="mode-pill" class="mode-pill">Estàtic</span>
+      </div>
+      <div id="sb-stats" class="sb-stats">Carregant índex...</div>
+    </div>
+
+    <div class="sb-scroll">
+      <div class="nav-group">
+        <div class="nav-label">Vistes</div>
+        <button class="nav-btn" data-view="recent" style="--c:var(--accent)">
+          <span class="ico">✦</span>
+          <span class="lbl">Novetats</span>
+          <span id="cnt-recent" class="badge">0</span>
+        </button>
+        <button class="nav-btn" data-view="favs" style="--c:var(--star)">
+          <span class="ico">★</span>
+          <span class="lbl">Preferits</span>
+          <span id="cnt-favs" class="badge">0</span>
+        </button>
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-label">Assignatures</div>
+        <div id="subj-nav"></div>
+      </div>
+    </div>
+
+    <div id="sb-foot" class="sb-foot">
+      <div id="static-hint" class="static-hint">
+        Mode estàtic · Obre <code>obrir_atenea.bat</code> per sincronitzar o obrir carpetes.
+      </div>
+    </div>
+  </aside>
+
+  <header class="topbar">
+    <div class="search-row">
+      <button id="menu-btn" class="menu-btn" aria-label="Obrir menú">☰</button>
+      <div id="search-box" class="search-box">
+        <span class="search-ico">⌕</span>
+        <input id="search-input" type="search" placeholder="Cerca arxius, temes o assignatures..." autocomplete="off" spellcheck="false">
+        <span class="kbd">/</span>
+        <button id="search-clear" class="clear-btn" type="button" aria-label="Netejar cerca">×</button>
+      </div>
+      <div class="top-right">
+        <div id="sync-card" class="sync-card"></div>
+        <button id="sync-btn" class="btn primary" style="display:none">Sincronitzar ara</button>
+        <button id="theme-btn" class="btn">Mode fosc</button>
+      </div>
+    </div>
+    <div id="sync-err-banner" class="sync-err-banner" style="display:none"></div>
+    <div class="chips-row">
+      <div id="kind-chips" class="chips"></div>
+    </div>
+  </header>
+
+  <main class="main">
+    <div id="view-bar" class="view-bar"></div>
+    <div id="content" class="content"></div>
+  </main>
+
+  <aside id="preview" class="preview" aria-label="Previsualització">
+    <div id="pv-head" class="pv-head"></div>
+    <div id="pv-body" class="pv-body"></div>
+  </aside>
+</div>
+
+<div id="backdrop" class="backdrop"></div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script src="catalog.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  var DATA = window.ATENEA_DATA || null;
+  var IS_SERVER = false;
+  var POLL_TIMER = null;
+  var TOAST_TIMER = null;
+  var UI_SAVE_TIMER = null;
+  var uiStateDirty = false;
+  var DAY_MS = 86400000;
+  var AUTO_COLLAPSE_THRESHOLD = 15;
+
+  var KIND_GROUPS = [
+    { id: "all", label: "Tots" },
+    { id: "pdf", label: "PDF" },
+    { id: "url", label: "Enllaços" },
+    { id: "video", label: "Vídeos" },
+    { id: "html", label: "Pàgines" },
+    { id: "other", label: "Altres" }
+  ];
+
+  var state = {
+    view: "recent",        // "recent" | "favs" | "subject"
+    subjectId: null,
+    recentWindow: "7d",    // "last" | "7d" | "30d"
+    kind: "all",
+    sort: "atenea",        // "atenea" | "recent" | "name" | "size"
+    query: "",
+    searchGlobal: false,
+    selectedId: null,
+    widePreview: false,
+    folderStates: loadLocalFolderStates(),
+    favs: loadFavs()
+  };
+
+  var subjMap = {};
+  var fileMap = {};
+
+  function normalizeFolderStates(obj){
+    var out = {};
+    if (!obj || typeof obj !== "object" || Array.isArray(obj)) return out;
+    Object.keys(obj).forEach(function(k){
+      if (typeof k === "string" && k.length <= 512) out[k] = !!obj[k];
+    });
+    return out;
+  }
+  function loadLocalFolderStates(){
+    try {
+      return normalizeFolderStates(JSON.parse(localStorage.getItem("atenea_folder_states") || "{}"));
+    } catch (e) { return {}; }
+  }
+  function postUiState(keepalive){
+    if (!IS_SERVER) return;
+    uiStateDirty = false;
+    fetch("/api/ui-state", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Atenea-UI": "1" },
+      body: JSON.stringify({ folderStates: state.folderStates }),
+      keepalive: !!keepalive
+    }).catch(function(){});
+  }
+  function saveFolderStates(){
+    try { localStorage.setItem("atenea_folder_states", JSON.stringify(state.folderStates)); } catch (e) {}
+    if (!IS_SERVER) return;
+    uiStateDirty = true;
+    clearTimeout(UI_SAVE_TIMER);
+    UI_SAVE_TIMER = setTimeout(function(){ postUiState(false); }, 150);
+  }
+  function isNodeCollapsed(key, count, forceExpand){
+    if (forceExpand) return false;
+    if (Object.prototype.hasOwnProperty.call(state.folderStates, key)) {
+      return !state.folderStates[key];
+    }
+    return count > AUTO_COLLAPSE_THRESHOLD;
+  }
+  function collectSubjectToggleKeys(subjectId){
+    var keys = new Set();
+    if (!DATA) return keys;
+    (DATA.files || []).forEach(function(f){
+      if (f.subjectId !== subjectId) return;
+      var sec = f.section || "";
+      keys.add(subjectId + "::" + sec);
+      var parts = f.subpath || [];
+      for (var i = 0; i < parts.length; i++) {
+        keys.add(subjectId + "::" + sec + "::" + parts.slice(0, i + 1).join("/"));
+      }
+    });
+    return keys;
+  }
+  function isGlobalSearchActive(){
+    return !!(state.query.trim() && (state.view === "recent" || state.searchGlobal));
+  }
+
+  function loadFavs(){
+    try {
+      var raw = JSON.parse(localStorage.getItem("atenea_favs") || "[]");
+      return new Set(Array.isArray(raw) ? raw : []);
+    } catch (e) { return new Set(); }
+  }
+  function saveFavs(){
+    try { localStorage.setItem("atenea_favs", JSON.stringify(Array.from(state.favs))); } catch (e) {}
+  }
+
+  function norm(str){
+    return (str || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  }
+  function esc(str){
+    return String(str == null ? "" : str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+  function fmtNum(n){
+    return Number(n || 0).toLocaleString("ca-ES");
+  }
+  function fmtBytes(bytes){
+    if (!bytes) return "0 B";
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1048576) return (bytes / 1024).toFixed(bytes < 10240 ? 1 : 0).replace(".", ",") + " KB";
+    if (bytes < 1073741824) return (bytes / 1048576).toFixed(1).replace(".", ",") + " MB";
+    return (bytes / 1073741824).toFixed(2).replace(".", ",") + " GB";
+  }
+  function parseLogTs(tsStr){
+    if (!tsStr) return 0;
+    var iso = tsStr.replace(" ", "T");
+    var d = new Date(iso);
+    return isNaN(d.getTime()) ? 0 : d.getTime();
+  }
+  function fmtDateShort(ms){
+    if (!ms) return "—";
+    var d = new Date(ms);
+    var dd = String(d.getDate()).padStart(2, "0");
+    var mm = String(d.getMonth() + 1).padStart(2, "0");
+    var yyyy = d.getFullYear();
+    return dd + "/" + mm + "/" + yyyy;
+  }
+  function fmtDateTimeShort(tsStr){
+    if (!tsStr) return "—";
+    var ms = parseLogTs(tsStr);
+    if (!ms) return tsStr;
+    var d = new Date(ms);
+    return String(d.getDate()).padStart(2, "0") + "/" +
+           String(d.getMonth() + 1).padStart(2, "0") + " " +
+           String(d.getHours()).padStart(2, "0") + ":" +
+           String(d.getMinutes()).padStart(2, "0");
+  }
+  function getFileActivityMs(f){
+    return f.syncedAt ? parseLogTs(f.syncedAt) : (f.mtime || 0) * 1000;
+  }
+  function isRecent7d(f){
+    var nowMs = DATA && DATA.generatedAt ? parseLogTs(DATA.generatedAt) : Date.now();
+    return (nowMs - getFileActivityMs(f)) <= 7 * DAY_MS;
+  }
+  function matchesKindChip(f, chipId){
+    if (chipId === "all") return true;
+    if (chipId === "other") return f.kind !== "pdf" && f.kind !== "url" && f.kind !== "video" && f.kind !== "html";
+    return f.kind === chipId;
+  }
+  function isDarkTheme(){
+    var attr = document.documentElement.getAttribute("data-theme");
+    if (attr === "dark") return true;
+    if (attr === "light") return false;
+    return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+  }
+  function subjectColor(subj){
+    if (!subj) return "var(--accent)";
+    return isDarkTheme() ? subj.colorDark : subj.colorLight;
+  }
+  function cleanSectionName(sec){
+    if (!sec) return "General";
+    var m = /^(\d+)\s*-\s*_+$/.exec(sec.trim());
+    if (m) return m[1] + " · Secció " + m[1];
+    return sec;
+  }
+  function displayFileName(f){
+    if (f.kind === "url" && /\.url$/i.test(f.name)) return f.name.slice(0, -4);
+    return f.name;
+  }
+  function kindBadge(f){
+    if (f.kind === "pdf") return { label: "PDF", cls: "k-pdf" };
+    if (f.kind === "url") return { label: f.isYoutube ? "YT" : "URL", cls: "k-url" };
+    if (f.kind === "html") return { label: "HTML", cls: "k-html" };
+    if (f.kind === "video") return { label: "VÍDEO", cls: "k-video" };
+    if (f.kind === "image") return { label: "IMG", cls: "k-image" };
+    if (f.kind === "office") return { label: (f.ext || "DOC").toUpperCase().slice(0, 5), cls: "k-office" };
+    if (f.kind === "code") return { label: (f.ext || "CODI").toUpperCase().slice(0, 5), cls: "k-code" };
+    if (f.kind === "archive") return { label: (f.ext || "ZIP").toUpperCase().slice(0, 5), cls: "k-archive" };
+    return { label: (f.ext || "ARXIU").toUpperCase().slice(0, 5), cls: "k-other" };
+  }
+  function windowsFullPath(f){
+    var root = (DATA && DATA.rootPath) ? DATA.rootPath.replace(/[\\/]+$/, "") : "";
+    var relWin = f.rel.replace(/\//g, "\\");
+    return root ? (root + "\\" + relWin) : relWin;
+  }
+
+  function showToast(msg){
+    var el = document.getElementById("toast");
+    el.textContent = msg;
+    el.classList.add("show");
+    clearTimeout(TOAST_TIMER);
+    TOAST_TIMER = setTimeout(function(){ el.classList.remove("show"); }, 2200);
+  }
+
+  function copyText(text, successMsg){
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function(){
+        showToast(successMsg);
+      }).catch(function(){ fallbackCopy(text, successMsg); });
+    } else {
+      fallbackCopy(text, successMsg);
+    }
+  }
+  function fallbackCopy(text, successMsg){
+    var ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand("copy"); showToast(successMsg); } catch (e) { showToast("No s'ha pogut copiar"); }
+    document.body.removeChild(ta);
+  }
+
+  function rebuildIndexes(){
+    subjMap = {};
+    fileMap = {};
+    if (!DATA) return;
+    (DATA.subjects || []).forEach(function(s){ subjMap[s.id] = s; });
+    (DATA.files || []).forEach(function(f){
+      fileMap[f.id] = f;
+      var s = subjMap[f.subjectId];
+      f._search = norm([
+        f.name,
+        f.section,
+        (f.subpath || []).join(" "),
+        s ? s.name : "",
+        s ? s.code : "",
+        f.targetUrl || ""
+      ].join(" "));
+    });
+    if (state.view === "subject" && !subjMap[state.subjectId]) {
+      state.view = "recent";
+      state.subjectId = null;
+    }
+    if (state.selectedId != null && !fileMap[state.selectedId]) {
+      state.selectedId = null;
+    }
+  }
+
+  function filterByView(files){
+    if (isGlobalSearchActive()) {
+      return files;
+    }
+    if (state.view === "subject" && state.subjectId) {
+      return files.filter(function(f){ return f.subjectId === state.subjectId; });
+    }
+    if (state.view === "favs") {
+      return files.filter(function(f){ return state.favs.has(f.rel); });
+    }
+    if (state.view === "recent") {
+      var nowMs = DATA && DATA.generatedAt ? parseLogTs(DATA.generatedAt) : Date.now();
+      if (state.recentWindow === "last") {
+        var last = DATA.sync && DATA.sync.lastSync;
+        if (!last || (last.new + last.updated) === 0) return [];
+        var startMs = parseLogTs(last.startedAt);
+        var endMs = parseLogTs(last.finishedAt) || startMs;
+        return files.filter(function(f){
+          if (!f.syncedAt) return false;
+          var t = parseLogTs(f.syncedAt);
+          return t >= startMs && t <= endMs;
+        });
+      }
+      var days = state.recentWindow === "30d" ? 30 : 7;
+      var cutoff = nowMs - days * DAY_MS;
+      return files.filter(function(f){ return getFileActivityMs(f) >= cutoff; });
+    }
+    return files;
+  }
+
+  function filterByQuery(files){
+    var q = norm(state.query.trim());
+    if (!q) return files;
+    var tokens = q.split(/\s+/).filter(Boolean);
+    if (!tokens.length) return files;
+    return files.filter(function(f){
+      for (var i = 0; i < tokens.length; i++) {
+        if (f._search.indexOf(tokens[i]) === -1) return false;
+      }
+      return true;
+    });
+  }
+
+  function sortFiles(files){
+    if (state.sort === "atenea") return files;
+    var arr = files.slice();
+    if (state.sort === "recent") {
+      arr.sort(function(a, b){ return getFileActivityMs(b) - getFileActivityMs(a) || a.id - b.id; });
+    } else if (state.sort === "name") {
+      arr.sort(function(a, b){ return a.name.localeCompare(b.name, "ca", { numeric: true, sensitivity: "base" }); });
+    } else if (state.sort === "size") {
+      arr.sort(function(a, b){ return (b.size || 0) - (a.size || 0) || a.id - b.id; });
+    }
+    return arr;
+  }
+
+  function updateThemeButton(){
+    var btn = document.getElementById("theme-btn");
+    btn.textContent = isDarkTheme() ? "Mode clar" : "Mode fosc";
+  }
+
+  function renderSidebar(){
+    if (!DATA) return;
+    var stats = DATA.stats || {};
+    document.getElementById("sb-stats").textContent =
+      (stats.subjects || 0) + " assignatures · " + fmtNum(stats.files) + " arxius · " + fmtBytes(stats.totalBytes);
+
+    var nowMs = DATA.generatedAt ? parseLogTs(DATA.generatedAt) : Date.now();
+    var recent7Count = 0;
+    (DATA.files || []).forEach(function(f){
+      if (nowMs - getFileActivityMs(f) <= 7 * DAY_MS) recent7Count++;
+    });
+
+    document.getElementById("cnt-recent").textContent = fmtNum(recent7Count);
+    document.getElementById("cnt-favs").textContent = fmtNum(state.favs.size);
+
+    document.querySelectorAll(".nav-btn[data-view]").forEach(function(btn){
+      var v = btn.getAttribute("data-view");
+      btn.classList.toggle("active", state.view === v);
+    });
+
+    var subjHtml = (DATA.subjects || []).map(function(s){
+      var active = state.view === "subject" && state.subjectId === s.id;
+      var c = subjectColor(s);
+      return '<button class="nav-btn' + (active ? ' active' : '') + '" data-subject="' + esc(s.id) + '" style="--c:' + esc(c) + '">' +
+        '<span class="dot"></span>' +
+        '<span class="lbl">' + esc(s.name) + (s.code ? '<span class="subcode">' + esc(s.code) + '</span>' : '') + '</span>' +
+        (s.recentCount > 0 ? '<span class="new-dot" title="' + s.recentCount + ' recents (7 dies)"></span>' : '') +
+        '<span class="badge">' + fmtNum(s.fileCount) + '</span>' +
+      '</button>';
+    }).join("");
+    document.getElementById("subj-nav").innerHTML = subjHtml;
+
+    renderSyncCard();
+  }
+
+  function renderSyncCard(){
+    var card = document.getElementById("sync-card");
+    var errBanner = document.getElementById("sync-err-banner");
+    var last = DATA && DATA.sync ? DATA.sync.lastSync : null;
+    if (!last) {
+      card.innerHTML = '<div class="sync-row"><span class="status-dot"></span><span>Sense registre de sync</span></div>';
+      errBanner.style.display = "none";
+      errBanner.textContent = "";
+      return;
+    }
+    var dt = fmtDateTimeShort(last.finishedAt || last.startedAt);
+    if (last.ok) {
+      var parts = [];
+      if (last.new > 0) parts.push("+" + last.new + " nous");
+      if (last.updated > 0) parts.push(last.updated + " act.");
+      var summary = parts.length ? parts.join(", ") : "Sense canvis";
+      card.innerHTML =
+        '<div class="sync-row"><span class="status-dot ok"></span><span>Últim sync: ' + esc(dt) + '</span></div>' +
+        '<div class="sync-meta">' + esc(summary) + '</div>';
+      errBanner.style.display = "none";
+      errBanner.textContent = "";
+    } else {
+      card.innerHTML =
+        '<div class="sync-row" title="' + esc(last.errorMessage || "") + '"><span class="status-dot err"></span><span>Error en l\'últim sync</span></div>' +
+        '<div class="sync-meta">' + esc(dt) + '</div>';
+      if (last.errorMessage) {
+        errBanner.textContent = "Error de sincronització: " + last.errorMessage;
+        errBanner.style.display = "";
+      } else {
+        errBanner.style.display = "none";
+        errBanner.textContent = "";
+      }
+    }
+  }
+
+  function renderChips(scopedFiles){
+    var counts = { all: scopedFiles.length, pdf: 0, url: 0, video: 0, html: 0, other: 0 };
+    scopedFiles.forEach(function(f){
+      if (f.kind === "pdf" || f.kind === "url" || f.kind === "video" || f.kind === "html") {
+        counts[f.kind]++;
+      } else {
+        counts.other++;
+      }
+    });
+    document.getElementById("kind-chips").innerHTML = KIND_GROUPS.map(function(g){
+      var active = state.kind === g.id;
+      return '<button class="chip' + (active ? ' active' : '') + '" data-kind="' + g.id + '">' +
+        '<span>' + esc(g.label) + '</span>' +
+        '<span class="cnt">' + fmtNum(counts[g.id]) + '</span>' +
+      '</button>';
+    }).join("");
+  }
+
+  function renderViewBar(visibleCount){
+    var bar = document.getElementById("view-bar");
+    var hasQuery = !!state.query.trim();
+    var globalSearch = isGlobalSearchActive();
+    var title = "Novetats";
+    var color = "var(--accent)";
+
+    if (globalSearch) {
+      title = "Resultats de la cerca";
+    } else if (state.view === "favs") {
+      title = "Preferits";
+      color = "var(--star)";
+    } else if (state.view === "subject" && subjMap[state.subjectId]) {
+      var s = subjMap[state.subjectId];
+      title = s.name;
+      color = subjectColor(s);
+    }
+
+    var sortSelect =
+      '<select id="sort-select" class="select" aria-label="Ordenació">' +
+        '<option value="atenea"' + (state.sort === "atenea" ? ' selected' : '') + '>Ordre d\'Atenea</option>' +
+        '<option value="recent"' + (state.sort === "recent" ? ' selected' : '') + '>Més recents</option>' +
+        '<option value="name"' + (state.sort === "name" ? ' selected' : '') + '>Nom A–Z</option>' +
+        '<option value="size"' + (state.sort === "size" ? ' selected' : '') + '>Mida</option>' +
+      '</select>';
+
+    var tools = "";
+    if (globalSearch) {
+      var scopeBack = "";
+      if (state.view === "subject" && subjMap[state.subjectId]) {
+        scopeBack = '<button class="btn" id="btn-scope-local">Només a ' + esc(subjMap[state.subjectId].name) + '</button>';
+      } else if (state.view === "favs") {
+        scopeBack = '<button class="btn" id="btn-scope-local">Només a Preferits</button>';
+      }
+      tools = scopeBack + '<button class="btn" id="btn-clear-search">Netejar cerca</button>' + sortSelect;
+    } else if (state.view === "recent") {
+      var win = state.recentWindow;
+      tools =
+        '<div class="chips">' +
+          '<button class="chip' + (win === "last" ? ' active' : '') + '" data-win="last">Últim sync</button>' +
+          '<button class="chip' + (win === "7d" ? ' active' : '') + '" data-win="7d">Últims 7 dies</button>' +
+          '<button class="chip' + (win === "30d" ? ' active' : '') + '" data-win="30d">Últims 30 dies</button>' +
+        '</div>';
+    } else {
+      var showTreeBtns = (state.view === "subject" && state.sort === "atenea");
+      tools =
+        (hasQuery ? '<button class="btn" id="btn-search-global">Cercar a totes les assignatures</button>' : '') +
+        (showTreeBtns
+          ? '<button class="btn" id="btn-expand-all">Desplegar tot</button><button class="btn" id="btn-collapse-all">Plegar tot</button>'
+          : '') +
+        sortSelect;
+    }
+
+    bar.style.setProperty("--c", color);
+    bar.innerHTML =
+      '<div class="view-title-wrap">' +
+        '<span class="subj-bar"></span>' +
+        '<h2 class="view-title">' + esc(title) + '</h2>' +
+        '<span class="view-count">' + fmtNum(visibleCount) + (visibleCount === 1 ? ' arxiu' : ' arxius') + '</span>' +
+      '</div>' +
+      '<div class="view-tools">' + tools + '</div>';
+  }
+
+  function renderFileRow(f, opts){
+    opts = opts || {};
+    var subj = subjMap[f.subjectId];
+    var c = subjectColor(subj);
+    var kb = kindBadge(f);
+    var isStar = state.favs.has(f.rel);
+    var isSel = state.selectedId === f.id;
+    var recent7 = isRecent7d(f);
+    var actionTag = "";
+    if (recent7 && f.syncAction === "new") actionTag = '<span class="tag tag-new">Nou</span>';
+    else if (recent7 && f.syncAction === "updated") actionTag = '<span class="tag tag-upd">Act.</span>';
+
+    var localTag = f.localOnly ? '<span class="tag tag-local" title="Només en local (vídeo o > 50 MB)">Local</span>' : '';
+
+    var subLine = "";
+    if (f.kind === "url" && f.targetUrl) {
+      subLine = f.targetUrl.replace(/^https?:\/\//i, "");
+    }
+    var crumbParts = [];
+    if (opts.showSubject && subj) crumbParts.push(subj.name);
+    if (opts.showSection && f.section) crumbParts.push(cleanSectionName(f.section));
+    if (opts.showSubpath && f.subpath && f.subpath.length) crumbParts.push(f.subpath.join(" / "));
+    var crumbText = crumbParts.join(" · ");
+
+    var openHref = (f.kind === "url" && f.targetUrl) ? f.targetUrl : f.href;
+    var openRel = (f.kind === "url") ? 'noopener noreferrer' : 'noopener';
+
+    return '<div class="file-row' + (isSel ? ' selected' : '') + '" data-fid="' + f.id + '" style="--c:' + esc(c) + ';--depth:' + (opts.depth || 0) + '">' +
+      '<span class="kind-pill ' + kb.cls + '">' + esc(kb.label) + '</span>' +
+      '<div class="file-info">' +
+        '<div class="file-title">' +
+          '<span class="file-name" title="' + esc(f.name) + '">' + esc(displayFileName(f)) + '</span>' +
+          actionTag + localTag +
+        '</div>' +
+        ((crumbText || subLine)
+          ? '<div class="file-sub">' +
+              (opts.showSubject && subj ? '<span class="subj-dot"></span>' : '') +
+              '<span>' + esc([crumbText, subLine].filter(Boolean).join(" · ")) + '</span>' +
+            '</div>'
+          : '') +
+      '</div>' +
+      '<div class="file-meta">' +
+        '<span class="file-size">' + (f.kind === "url" ? "Enllaç" : fmtBytes(f.size)) + '</span>' +
+        '<span class="file-date">' + fmtDateShort(getFileActivityMs(f)) + '</span>' +
+      '</div>' +
+      '<div class="file-acts">' +
+        '<button class="icon-btn' + (isStar ? ' starred' : '') + '" data-act="star" title="' + (isStar ? 'Treure de preferits' : 'Afegir a preferits') + '">' + (isStar ? '★' : '☆') + '</button>' +
+        '<a class="icon-btn" href="' + esc(openHref) + '" target="_blank" rel="' + openRel + '" data-act="ext" title="Obrir en una pestanya nova">↗</a>' +
+        '<button class="icon-btn" data-act="copy" title="Copiar ruta completa">⧉</button>' +
+        (IS_SERVER
+          ? '<button class="icon-btn" data-act="open" title="Obrir al sistema">▶</button>' +
+            '<button class="icon-btn" data-act="reveal" title="Mostrar a la carpeta">📁</button>'
+          : '') +
+      '</div>' +
+    '</div>';
+  }
+
+  function buildFolderTree(files){
+    var root = { files: [], children: new Map(), count: 0 };
+    files.forEach(function(f){
+      var node = root;
+      node.count++;
+      var parts = f.subpath || [];
+      for (var i = 0; i < parts.length; i++) {
+        var seg = parts[i];
+        if (!node.children.has(seg)) {
+          node.children.set(seg, { files: [], children: new Map(), count: 0 });
+        }
+        node = node.children.get(seg);
+        node.count++;
+      }
+      node.files.push(f);
+    });
+    return root;
+  }
+
+  function renderFolderNode(node, subjectId, section, prefixPath, depth, forceExpand){
+    var html = "";
+    node.files.forEach(function(f){
+      html += renderFileRow(f, { depth: depth });
+    });
+    node.children.forEach(function(child, name){
+      var pathArr = prefixPath.concat([name]);
+      var key = subjectId + "::" + section + "::" + pathArr.join("/");
+      var isCol = isNodeCollapsed(key, child.count, forceExpand);
+      html +=
+        '<div class="folder-node' + (isCol ? ' collapsed' : '') + '" style="--depth:' + depth + '">' +
+          '<button class="folder-head" type="button" data-toggle="' + esc(key) + '">' +
+            '<span class="chev">▾</span>' +
+            '<span>' + esc(name) + '</span>' +
+            '<span class="f-cnt">' + fmtNum(child.count) + '</span>' +
+          '</button>' +
+          '<div class="folder-body">' +
+            renderFolderNode(child, subjectId, section, pathArr, depth + 1, forceExpand) +
+          '</div>' +
+        '</div>';
+    });
+    return html;
+  }
+
+  function renderSubjectTree(files, subject){
+    var forceExpand = !!(state.query.trim() || state.kind !== "all");
+    var c = subjectColor(subject);
+    var secOrder = [];
+    var bySec = new Map();
+    files.forEach(function(f){
+      var sec = f.section || "";
+      if (!bySec.has(sec)) { bySec.set(sec, []); secOrder.push(sec); }
+      bySec.get(sec).push(f);
+    });
+
+    return secOrder.map(function(sec){
+      var secFiles = bySec.get(sec);
+      var key = subject.id + "::" + sec;
+      var isCol = isNodeCollapsed(key, secFiles.length, forceExpand);
+      var tree = buildFolderTree(secFiles);
+      return '<section class="section-card' + (isCol ? ' collapsed' : '') + '" style="--c:' + esc(c) + '">' +
+        '<button class="section-head" type="button" data-toggle="' + esc(key) + '" title="' + esc(sec) + '">' +
+          '<span class="chev">▾</span>' +
+          '<span class="sec-name">' + esc(cleanSectionName(sec)) + '</span>' +
+          '<span class="sec-cnt">' + fmtNum(secFiles.length) + '</span>' +
+        '</button>' +
+        '<div class="section-body">' +
+          renderFolderNode(tree, subject.id, sec, [], 0, forceExpand) +
+        '</div>' +
+      '</section>';
+    }).join("");
+  }
+
+  function renderContent(visibleFiles){
+    var el = document.getElementById("content");
+    if (!DATA) {
+      el.innerHTML =
+        '<div class="banner">' +
+          '<div><strong>No s\'ha trobat catalog.js</strong><br>' +
+          '<span style="color:var(--muted)">Executa <code>python build_index.py</code> o obre <code>obrir_atenea.bat</code> per generar l\'índex dels teus arxius locals.</span></div>' +
+        '</div>';
+      return;
+    }
+
+    if (!visibleFiles.length) {
+      if ((state.view === "subject" || state.view === "favs") && state.query.trim() && !state.searchGlobal) {
+        el.innerHTML =
+          '<div class="empty">' +
+            '<h3>Cap coincidència aquí</h3>' +
+            '<p>No s\'han trobat arxius amb aquesta cerca dins d\'aquesta vista.</p>' +
+            '<p style="margin-top:12px"><button class="btn primary" id="btn-empty-global">Cercar a totes les assignatures</button></p>' +
+          '</div>';
+      } else if (state.view === "favs" && state.favs.size === 0 && !state.query && state.kind === "all") {
+        el.innerHTML = '<div class="empty"><h3>Cap arxiu preferit</h3><p>Marca la ★ de qualsevol arxiu per tenir-lo sempre a mà.</p></div>';
+      } else if (state.view === "recent" && state.recentWindow === "last" && !state.query && state.kind === "all") {
+        var last = DATA.sync && DATA.sync.lastSync;
+        var dt = last ? fmtDateTimeShort(last.finishedAt || last.startedAt) : "—";
+        el.innerHTML =
+          '<div class="empty">' +
+            '<h3>Sense novetats a l\'últim sync</h3>' +
+            '<p>La darrera sincronització (' + esc(dt) + ') no va baixar ni actualitzar cap arxiu.</p>' +
+            '<p style="margin-top:12px"><button class="btn" id="jump-7d">Veure els últims 7 dies</button></p>' +
+          '</div>';
+      } else {
+        el.innerHTML = '<div class="empty"><h3>Cap coincidència</h3><p>Prova amb una altra cerca o canvia el filtre de tipus.</p></div>';
+      }
+      return;
+    }
+
+    if (isGlobalSearchActive()) {
+      var globalSorted = sortFiles(visibleFiles);
+      el.innerHTML = '<div class="flat-list">' +
+        globalSorted.map(function(f){ return renderFileRow(f, { showSubject: true, showSection: true, showSubpath: true }); }).join("") +
+      '</div>';
+      return;
+    }
+
+    if (state.view === "recent") {
+      var sortedRecent = visibleFiles.slice().sort(function(a, b){
+        return getFileActivityMs(b) - getFileActivityMs(a) || a.id - b.id;
+      });
+      var groups = [];
+      var gMap = new Map();
+      sortedRecent.forEach(function(f){
+        var dayLbl = fmtDateShort(getFileActivityMs(f));
+        if (!gMap.has(dayLbl)) { var arr = []; gMap.set(dayLbl, arr); groups.push([dayLbl, arr]); }
+        gMap.get(dayLbl).push(f);
+      });
+      el.innerHTML = groups.map(function(pair){
+        return '<div class="date-group">' +
+          '<div class="date-head"><span>' + esc(pair[0]) + '</span><span>' + fmtNum(pair[1].length) + '</span></div>' +
+          '<div class="flat-list">' +
+            pair[1].map(function(f){ return renderFileRow(f, { showSubject: true, showSection: true, showSubpath: true }); }).join("") +
+          '</div>' +
+        '</div>';
+      }).join("");
+      return;
+    }
+
+    if (state.view === "favs") {
+      var bySubj = new Map();
+      visibleFiles.forEach(function(f){
+        if (!bySubj.has(f.subjectId)) bySubj.set(f.subjectId, []);
+        bySubj.get(f.subjectId).push(f);
+      });
+      var html = "";
+      (DATA.subjects || []).forEach(function(s){
+        var list = bySubj.get(s.id);
+        if (!list) return;
+        list = sortFiles(list);
+        html +=
+          '<section class="section-card" style="--c:' + esc(subjectColor(s)) + '">' +
+            '<div class="section-head" style="cursor:default">' +
+              '<span class="subj-dot"></span>' +
+              '<span class="sec-name">' + esc(s.name) + '</span>' +
+              '<span class="sec-cnt">' + fmtNum(list.length) + '</span>' +
+            '</div>' +
+            '<div class="section-body">' +
+              list.map(function(f){ return renderFileRow(f, { showSection: true, showSubpath: true }); }).join("") +
+            '</div>' +
+          '</section>';
+      });
+      el.innerHTML = html;
+      return;
+    }
+
+    if (state.view === "subject" && state.sort === "atenea" && subjMap[state.subjectId]) {
+      el.innerHTML = renderSubjectTree(visibleFiles, subjMap[state.subjectId]);
+      return;
+    }
+
+    var sorted = sortFiles(visibleFiles);
+    var showSubj = (state.view !== "subject");
+    el.innerHTML = '<div class="flat-list">' +
+      sorted.map(function(f){ return renderFileRow(f, { showSubject: showSubj, showSection: true, showSubpath: true }); }).join("") +
+    '</div>';
+  }
+
+  function renderPreview(){
+    var app = document.getElementById("app");
+    var head = document.getElementById("pv-head");
+    var body = document.getElementById("pv-body");
+    var f = (state.selectedId != null) ? fileMap[state.selectedId] : null;
+
+    app.classList.toggle("has-preview", !!f);
+    app.classList.toggle("wide-preview", !!(f && state.widePreview));
+    if (!f) {
+      head.innerHTML = "";
+      body.innerHTML = "";
+      return;
+    }
+
+    var subj = subjMap[f.subjectId];
+    var c = subjectColor(subj);
+    var isStar = state.favs.has(f.rel);
+    var openHref = (f.kind === "url" && f.targetUrl) ? f.targetUrl : f.href;
+    var openRel = (f.kind === "url") ? "noopener noreferrer" : "noopener";
+    var crumb = [cleanSectionName(f.section)].concat(f.subpath || []).filter(Boolean).join(" / ");
+
+    head.style.setProperty("--c", c);
+    head.innerHTML =
+      '<div class="pv-top">' +
+        '<div class="pv-meta">' +
+          '<div class="pv-crumb">' +
+            (subj ? '<span class="pv-subj">' + esc(subj.name) + '</span>' : '') +
+            (crumb ? '<span title="' + esc(crumb) + '">' + esc(crumb) + '</span>' : '') +
+          '</div>' +
+          '<h3 class="pv-title">' + esc(displayFileName(f)) + '</h3>' +
+        '</div>' +
+        '<div style="display:flex;gap:4px;flex:none">' +
+          '<button class="btn btn-wide-toggle" id="pv-wide" title="Canviar amplada">' + (state.widePreview ? '⇤' : '⇥') + '</button>' +
+          '<button class="btn" id="pv-close" title="Tancar (Esc)">×</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="pv-acts">' +
+        '<a class="btn primary" href="' + esc(openHref) + '" target="_blank" rel="' + openRel + '">Obrir en pestanya ↗</a>' +
+        '<button class="btn" id="pv-copy">Copiar ruta</button>' +
+        (IS_SERVER
+          ? '<button class="btn" id="pv-open">Obrir al sistema</button>' +
+            '<button class="btn" id="pv-reveal">Carpeta</button>'
+          : '') +
+        '<button class="btn" id="pv-star">' + (isStar ? '★ Preferit' : '☆ Preferit') + '</button>' +
+      '</div>';
+
+    var htmlContent = (DATA.htmlContents && DATA.htmlContents[f.rel]) || null;
+    var textContent = (DATA.textContents && Object.prototype.hasOwnProperty.call(DATA.textContents, f.rel)) ? DATA.textContents[f.rel] : null;
+
+    if (f.kind === "pdf") {
+      body.innerHTML = '<iframe class="pv-frame" src="' + esc(f.href) + '" title="' + esc(f.name) + '"></iframe>';
+    } else if (f.kind === "image") {
+      body.innerHTML = '<div class="pv-media"><img src="' + esc(f.href) + '" alt="' + esc(f.name) + '"></div>';
+    } else if (f.kind === "video") {
+      body.innerHTML =
+        '<div class="pv-media">' +
+          '<video controls preload="metadata" src="' + esc(f.href) + '"></video>' +
+          '<p class="pv-note">Si el navegador no reprodueix el còdec (p. ex. .mpeg o .avi), fes servir «Obrir al sistema» o «Obrir en pestanya».</p>' +
+        '</div>';
+    } else if (f.kind === "html" && htmlContent != null) {
+      var dark = isDarkTheme();
+      var wrapped = '<!DOCTYPE html><html lang="ca"><head><meta charset="utf-8"><style>' +
+        'body{margin:0;padding:22px 24px;font-family:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;font-size:15px;line-height:1.6;' +
+        'background:' + (dark ? '#19212A' : '#FFFFFF') + ';color:' + (dark ? '#E6EBF0' : '#17202A') + ';}' +
+        'a{color:' + (dark ? '#8FA2FF' : '#2340C9') + ';}' +
+        'img{max-width:100%;height:auto;}table{border-collapse:collapse;max-width:100%;}td,th{border:1px solid ' + (dark ? '#2B3640' : '#D8DEE5') + ';padding:6px 10px;}' +
+        'h1,h2,h3,h4{margin-top:1.1em;margin-bottom:.4em;line-height:1.25;}ul,ol{padding-left:22px;}' +
+        '</style></head><body>' + htmlContent + '</body></html>';
+      body.innerHTML = '<iframe class="pv-frame" sandbox=""></iframe>';
+      body.querySelector("iframe").srcdoc = wrapped;
+    } else if (f.kind === "code" && textContent != null) {
+      body.innerHTML = '<pre class="pv-code"><code>' + esc(textContent) + '</code></pre>';
+    } else if (f.kind === "url") {
+      body.innerHTML =
+        '<div class="pv-card">' +
+          '<div class="eyebrow">' + (f.isYoutube ? 'Vídeo / Enllaç de YouTube' : 'Enllaç extern') + '</div>' +
+          '<h3 style="margin:0;font-family:var(--f-display)">' + esc(displayFileName(f)) + '</h3>' +
+          '<p style="margin:0;word-break:break-all;color:var(--muted);font-size:13px">' + esc(f.targetUrl || "Sense URL") + '</p>' +
+          (f.targetUrl ? '<a class="btn primary" href="' + esc(f.targetUrl) + '" target="_blank" rel="noopener noreferrer">Obrir enllaç ↗</a>' : '') +
+        '</div>';
+    } else {
+      body.innerHTML =
+        '<div class="pv-card">' +
+          '<div class="eyebrow">Fitxer local (' + esc((f.ext || "binari").toUpperCase()) + ')</div>' +
+          '<h3 style="margin:0;font-family:var(--f-display)">' + esc(f.name) + '</h3>' +
+          '<dl>' +
+            '<dt>Mida</dt><dd class="mono">' + fmtBytes(f.size) + '</dd>' +
+            '<dt>Data</dt><dd class="mono">' + fmtDateShort(getFileActivityMs(f)) + '</dd>' +
+            '<dt>Ruta</dt><dd class="mono">' + esc(windowsFullPath(f)) + '</dd>' +
+          '</dl>' +
+          '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">' +
+            (IS_SERVER
+              ? '<button class="btn primary" id="pv-card-open">Obrir al sistema</button>' +
+                '<button class="btn" id="pv-card-reveal">Mostrar a la carpeta</button>'
+              : '<a class="btn primary" href="' + esc(f.href) + '" target="_blank" rel="noopener">Obrir / Descarregar</a>') +
+            '<button class="btn" id="pv-card-copy">Copiar ruta</button>' +
+          '</div>' +
+        '</div>';
+    }
+  }
+
+  function render(){
+    updateThemeButton();
+    if (!DATA) {
+      renderViewBar(0);
+      renderContent([]);
+      renderPreview();
+      return;
+    }
+    var viewFiles = filterByView(DATA.files || []);
+    var queryFiles = filterByQuery(viewFiles);
+    renderChips(queryFiles);
+    var visible = queryFiles.filter(function(f){ return matchesKindChip(f, state.kind); });
+    renderSidebar();
+    renderViewBar(visible.length);
+    renderContent(visible);
+    renderPreview();
+  }
+
+  function apiPost(url, payload){
+    return fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Atenea-UI": "1" },
+      body: JSON.stringify(payload || {})
+    }).then(function(r){ return r.json().then(function(j){ return { ok: r.ok, data: j }; }); });
+  }
+
+  function openInSystem(f){
+    apiPost("/api/open", { path: f.rel }).then(function(res){
+      if (!res.ok) showToast("Error: " + (res.data.error || "no s'ha pogut obrir"));
+    }).catch(function(){ showToast("No s'ha pogut connectar amb el servidor"); });
+  }
+
+  function revealInExplorer(f){
+    apiPost("/api/reveal", { path: f.rel }).then(function(res){
+      if (!res.ok) showToast("Error: " + (res.data.error || "no s'ha pogut obrir"));
+    }).catch(function(){ showToast("No s'ha pogut connectar amb el servidor"); });
+  }
+
+  function setSyncButtonRunning(running){
+    var btn = document.getElementById("sync-btn");
+    btn.disabled = running;
+    btn.innerHTML = running ? '<span class="spinner"></span> Sincronitzant...' : 'Sincronitzar ara';
+  }
+
+  function pollSyncStatus(){
+    clearInterval(POLL_TIMER);
+    POLL_TIMER = setInterval(function(){
+      fetch("/api/sync-status", { cache: "no-store" })
+        .then(function(r){ return r.json(); })
+        .then(function(st){
+          if (st.running) return;
+          clearInterval(POLL_TIMER);
+          setSyncButtonRunning(false);
+          fetch("/api/catalog", { cache: "no-store" })
+            .then(function(r){ return r.json(); })
+            .then(function(cat){
+              DATA = cat;
+              window.ATENEA_DATA = cat;
+              rebuildIndexes();
+              render();
+              if (st.exitCode === 0) {
+                showToast("Sincronització completada");
+              } else {
+                showToast("Sincronització acabada amb avisos");
+              }
+            });
+        }).catch(function(){
+          clearInterval(POLL_TIMER);
+          setSyncButtonRunning(false);
+        });
+    }, 1200);
+  }
+
+  function triggerSync(){
+    setSyncButtonRunning(true);
+    apiPost("/api/sync", {}).then(function(res){
+      if (res.ok) {
+        pollSyncStatus();
+      } else {
+        setSyncButtonRunning(false);
+        showToast("Error iniciant la sincronització");
+      }
+    }).catch(function(){
+      setSyncButtonRunning(false);
+      showToast("Servidor no disponible");
+    });
+  }
+
+  function detectServer(){
+    if (location.protocol !== "http:" && location.protocol !== "https:") return;
+    fetch("/api/ping", { cache: "no-store" })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(info){
+        if (!info || !info.ok || info.app !== "atenea-local") return;
+        IS_SERVER = true;
+        var pill = document.getElementById("mode-pill");
+        pill.textContent = "Servidor";
+        pill.classList.add("live");
+        document.getElementById("sync-btn").style.display = "";
+        document.getElementById("sb-foot").style.display = "none";
+        if (info.syncing) {
+          setSyncButtonRunning(true);
+          pollSyncStatus();
+        }
+        var tasks = [];
+        tasks.push(
+          fetch("/api/ui-state", { cache: "no-store" })
+            .then(function(r){ return r.ok ? r.json() : null; })
+            .then(function(st){
+              if (!st || typeof st.folderStates !== "object") return;
+              var serverFs = normalizeFolderStates(st.folderStates);
+              if (Object.keys(serverFs).length > 0) {
+                state.folderStates = serverFs;
+                try { localStorage.setItem("atenea_folder_states", JSON.stringify(state.folderStates)); } catch (e) {}
+              } else if (Object.keys(state.folderStates).length > 0) {
+                postUiState(false);
+              }
+            })
+            .catch(function(){})
+        );
+        if (!DATA) {
+          tasks.push(
+            fetch("/api/catalog", { cache: "no-store" })
+              .then(function(r){ return r.json(); })
+              .then(function(cat){
+                DATA = cat;
+                rebuildIndexes();
+              })
+          );
+        }
+        return Promise.all(tasks);
+      })
+      .then(function(){ render(); })
+      .catch(function(){});
+  }
+
+  function toggleStar(f){
+    if (state.favs.has(f.rel)) state.favs.delete(f.rel);
+    else state.favs.add(f.rel);
+    saveFavs();
+    render();
+  }
+
+  function toggleMobileMenu(open){
+    document.getElementById("sidebar").classList.toggle("open", open);
+    document.getElementById("backdrop").classList.toggle("show", open);
+  }
+
+  // Event delegation
+  document.getElementById("sidebar").addEventListener("click", function(ev){
+    var viewBtn = ev.target.closest(".nav-btn[data-view]");
+    if (viewBtn) {
+      state.view = viewBtn.getAttribute("data-view");
+      state.subjectId = null;
+      state.searchGlobal = false;
+      toggleMobileMenu(false);
+      render();
+      return;
+    }
+    var subjBtn = ev.target.closest(".nav-btn[data-subject]");
+    if (subjBtn) {
+      state.view = "subject";
+      state.subjectId = subjBtn.getAttribute("data-subject");
+      state.searchGlobal = false;
+      toggleMobileMenu(false);
+      render();
+      return;
+    }
+  });
+
+  document.getElementById("theme-btn").addEventListener("click", function(){
+    var next = isDarkTheme() ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", next);
+    try { localStorage.setItem("atenea_theme", next); } catch (e) {}
+    render();
+  });
+
+  document.getElementById("sync-btn").addEventListener("click", triggerSync);
+  document.getElementById("menu-btn").addEventListener("click", function(){ toggleMobileMenu(true); });
+  document.getElementById("backdrop").addEventListener("click", function(){ toggleMobileMenu(false); });
+
+  var searchInput = document.getElementById("search-input");
+  var searchBox = document.getElementById("search-box");
+  function clearSearch(focusInput){
+    state.query = "";
+    state.searchGlobal = false;
+    searchInput.value = "";
+    searchBox.classList.remove("has-val");
+    render();
+    if (focusInput) searchInput.focus();
+  }
+  searchInput.addEventListener("input", function(){
+    state.query = searchInput.value;
+    if (!state.query.trim()) state.searchGlobal = false;
+    searchBox.classList.toggle("has-val", !!state.query);
+    render();
+  });
+  document.getElementById("search-clear").addEventListener("click", function(){
+    clearSearch(true);
+  });
+
+  document.getElementById("kind-chips").addEventListener("click", function(ev){
+    var btn = ev.target.closest(".chip[data-kind]");
+    if (!btn) return;
+    state.kind = btn.getAttribute("data-kind");
+    render();
+  });
+
+  document.getElementById("view-bar").addEventListener("click", function(ev){
+    var winBtn = ev.target.closest(".chip[data-win]");
+    if (winBtn) {
+      state.recentWindow = winBtn.getAttribute("data-win");
+      render();
+      return;
+    }
+    if (ev.target.id === "btn-search-global") {
+      state.searchGlobal = true;
+      render();
+      return;
+    }
+    if (ev.target.id === "btn-scope-local") {
+      state.searchGlobal = false;
+      render();
+      return;
+    }
+    if (ev.target.id === "btn-clear-search") {
+      clearSearch(false);
+      return;
+    }
+    if (ev.target.id === "btn-expand-all" && state.subjectId) {
+      collectSubjectToggleKeys(state.subjectId).forEach(function(k){
+        state.folderStates[k] = true;
+      });
+      saveFolderStates();
+      render();
+      return;
+    }
+    if (ev.target.id === "btn-collapse-all" && state.subjectId) {
+      collectSubjectToggleKeys(state.subjectId).forEach(function(k){
+        state.folderStates[k] = false;
+      });
+      saveFolderStates();
+      render();
+    }
+  });
+
+  document.getElementById("view-bar").addEventListener("change", function(ev){
+    if (ev.target.id === "sort-select") {
+      state.sort = ev.target.value;
+      render();
+    }
+  });
+
+  document.getElementById("content").addEventListener("click", function(ev){
+    if (ev.target.id === "jump-7d") {
+      state.recentWindow = "7d";
+      render();
+      return;
+    }
+    if (ev.target.id === "btn-empty-global") {
+      state.searchGlobal = true;
+      render();
+      return;
+    }
+    var toggleBtn = ev.target.closest("[data-toggle]");
+    if (toggleBtn) {
+      var key = toggleBtn.getAttribute("data-toggle");
+      var box = toggleBtn.parentElement;
+      var currentlyCollapsed = box ? box.classList.contains("collapsed") : false;
+      state.folderStates[key] = currentlyCollapsed;
+      if (box) box.classList.toggle("collapsed", !currentlyCollapsed);
+      saveFolderStates();
+      return;
+    }
+
+    var row = ev.target.closest(".file-row[data-fid]");
+    if (!row) return;
+    var f = fileMap[Number(row.getAttribute("data-fid"))];
+    if (!f) return;
+
+    var actEl = ev.target.closest("[data-act]");
+    if (actEl) {
+      var act = actEl.getAttribute("data-act");
+      if (act === "ext") { ev.stopPropagation(); return; } // deixa obrir l'enllaç sense obrir la fila
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (act === "star") toggleStar(f);
+      else if (act === "copy") copyText(windowsFullPath(f), "Ruta copiada");
+      else if (act === "open") openInSystem(f);
+      else if (act === "reveal") revealInExplorer(f);
+      return;
+    }
+
+    if (f.kind === "url" && f.targetUrl) {
+      window.open(f.targetUrl, "_blank", "noopener,noreferrer");
+      if (state.selectedId != null) {
+        state.selectedId = f.id;
+        render();
+      }
+      return;
+    }
+    state.selectedId = f.id;
+    render();
+  });
+
+  document.getElementById("preview").addEventListener("click", function(ev){
+    var f = (state.selectedId != null) ? fileMap[state.selectedId] : null;
+    if (ev.target.id === "pv-close") {
+      state.selectedId = null;
+      render();
+      return;
+    }
+    if (ev.target.id === "pv-wide") {
+      state.widePreview = !state.widePreview;
+      renderPreview();
+      return;
+    }
+    if (!f) return;
+    if (ev.target.id === "pv-copy" || ev.target.id === "pv-card-copy") {
+      copyText(windowsFullPath(f), "Ruta copiada");
+    } else if (ev.target.id === "pv-star") {
+      toggleStar(f);
+    } else if (ev.target.id === "pv-open" || ev.target.id === "pv-card-open") {
+      openInSystem(f);
+    } else if (ev.target.id === "pv-reveal" || ev.target.id === "pv-card-reveal") {
+      revealInExplorer(f);
+    }
+  });
+
+  document.addEventListener("keydown", function(ev){
+    var active = document.activeElement;
+    var inInput = active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.tagName === "SELECT");
+    if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "k") {
+      ev.preventDefault();
+      searchInput.focus();
+      searchInput.select();
+      return;
+    }
+    if (ev.key === "/" && !inInput) {
+      ev.preventDefault();
+      searchInput.focus();
+      searchInput.select();
+      return;
+    }
+    if (ev.key === "Escape") {
+      if (active === searchInput && state.query) {
+        clearSearch(false);
+      } else if (state.selectedId != null) {
+        state.selectedId = null;
+        render();
+      }
+    }
+  });
+
+  window.addEventListener("pagehide", function(){
+    if (IS_SERVER && uiStateDirty) {
+      clearTimeout(UI_SAVE_TIMER);
+      postUiState(true);
+    }
+  });
+
+  rebuildIndexes();
+  render();
+  detectServer();
+})();
+</script>
+</body>
+</html>

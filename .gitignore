@@ -1,0 +1,9 @@
+# Secrets, documents descarregats i fitxers generats localment
+Assignatures/
+config.json
+sync.log
+catalog.js
+ui_state.json
+subjects.json
+*.part
+__pycache__/
