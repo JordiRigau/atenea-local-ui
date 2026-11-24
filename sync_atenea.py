@@ -1,11 +1,11 @@
-"""Descarga todos los documentos de Atenea (Moodle UPC) usando la API de web services.
+"""Descarga todos los documentos de Moodle (por defecto Atenea UPC) usando la API de web services.
 
 Uso:
     python sync_atenea.py            # sincroniza todas las asignaturas
     python sync_atenea.py --dry-run  # solo muestra lo que descargaría
 
 Configuración en config.json (no se sube a git):
-    {"token": "...", "download_videos": true, "max_repo_file_mb": 50}
+    {"base_url": "https://atenea.upc.edu", "token": "...", "download_videos": true, "max_repo_file_mb": 50}
 """
 import argparse
 import html
@@ -18,7 +18,8 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-BASE_URL = "https://atenea.upc.edu"
+DEFAULT_BASE_URL = "https://atenea.upc.edu"
+BASE_URL = DEFAULT_BASE_URL
 ROOT = Path(__file__).resolve().parent
 DOCS_DIR = ROOT / "Assignatures"
 CONFIG_FILE = ROOT / "config.json"
@@ -51,14 +52,15 @@ def clean(name, maxlen=80):
 
 
 class Moodle:
-    def __init__(self, token):
+    def __init__(self, token, base_url=DEFAULT_BASE_URL):
         self.token = token
+        self.base_url = (base_url or DEFAULT_BASE_URL).rstrip("/")
 
     def call(self, function, **params):
         data = {"wstoken": self.token, "wsfunction": function, "moodlewsrestformat": "json"}
         data.update(flatten(params))
         body = urllib.parse.urlencode(data).encode()
-        with urllib.request.urlopen(f"{BASE_URL}/webservice/rest/server.php", body, timeout=60) as r:
+        with urllib.request.urlopen(f"{self.base_url}/webservice/rest/server.php", body, timeout=60) as r:
             result = json.load(r)
         if isinstance(result, dict) and "exception" in result:
             raise RuntimeError(f"{function}: {result.get('errorcode')} - {result.get('message')}")
@@ -176,14 +178,15 @@ def main():
     if not CONFIG_FILE.exists():
         sys.exit(f"Falta {CONFIG_FILE.name}. Ejecuta primero: python get_token.py")
     config = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+    base_url = (config.get("base_url") or DEFAULT_BASE_URL).rstrip("/")
     download_videos = config.get("download_videos", True)
     max_bytes = config.get("max_repo_file_mb", 50) * 1024 * 1024
-    moodle = Moodle(config["token"])
+    moodle = Moodle(config["token"], base_url=base_url)
 
     try:
         site = moodle.call("core_webservice_get_site_info")
     except Exception as e:
-        log(f"ERROR: no se puede conectar con Atenea (¿token caducado?): {e}")
+        log(f"ERROR: no se puede conectar con Moodle/Atenea (¿token caducado?): {e}")
         sys.exit(1)
     log(f"Conectado como {site['fullname']}")
 

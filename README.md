@@ -1,6 +1,6 @@
 # Atenea Local UI
 
-Sincronitzador automàtic dels documents d'[Atenea (Moodle UPC)](https://atenea.upc.edu) i visor web local en català, 100% offline i sense dependències externes.
+Sincronitzador automàtic dels documents d'[Atenea (Moodle UPC)](https://atenea.upc.edu) —i compatible amb qualsevol altre Moodle— amb un visor web local en català, 100% offline i sense dependències externes.
 
 ### Captures de pantalla
 
@@ -11,6 +11,15 @@ Sincronitzador automàtic dels documents d'[Atenea (Moodle UPC)](https://atenea.
 **Vista de novetats i estat de sincronització (mode fosc)**
 
 ![Vista de novetats en mode fosc](docs/preview-dark.png)
+
+## Per què és millor que entrar directament a Atenea / Moodle?
+
+- **Instantani i 100 % local (offline)**: obre PDFs, apunts, pàgines i vídeos al moment des del disc, sense esperes ni haver de fer login CAS cada sessió, i funciona fins i tot sense internet.
+- **Cerca global real (`/` o `Ctrl+K`)**: troba qualsevol arxiu entre totes les assignatures a l'instant, sense distingir accents ni majúscules i filtrant per tipus (`PDF`, `Enllaços`, `Vídeos`, `Pàgines`, `Altres`).
+- **Novetats centralitzades**: consulta en una sola pantalla tot el que s'ha penjat o actualitzat a l'últim sync o als darrers 7/30 dies, sense haver d'entrar assignatura per assignatura.
+- **Preferits (`★`)**: fixa formularis, temaris, guions o exàmens clau a un sol clic.
+- **Arxius reals, editables i permanents**: tot es desa en carpetes normals dins d'`Assignatures/`; pots subratllar PDFs, obrir Excels, Words o codi amb l'app nativa del sistema i conservar la còpia encara que un professor retiri un document o s'acabi el quadrimestre.
+- **Interfície neta, ràpida i 100 % editable**: panell de previsualització lateral, desplegables intel·ligents (`> 15` fitxers plegats per defecte) que recorden com els vas deixar, mode clar/fosc i tot en un sol `index.html` + scripts Python sense dependències per poder adaptar colors, noms (`subjects.json`) o funcions al teu gust.
 
 ## Funcions principals
 
@@ -27,6 +36,13 @@ Sincronitzador automàtic dels documents d'[Atenea (Moodle UPC)](https://atenea.
   - Afegeix botó **Sincronitzar ara** des de la UI.
   - Permet **Obrir al sistema** (Word, Excel, MATLAB, etc.), **Mostrar a la carpeta** a l'Explorador de Windows, reproducció de vídeo amb peticions `Range` i persistència de l'estat dels desplegables a `ui_state.json`.
 
+## Compatible amb qualsevol Moodle
+
+Tot i estar pensat inicialment per a Atenea (UPC), el sincronitzador fa servir els **Moodle Mobile Web Services** estàndard (`core_webservice_get_site_info`, `core_enrol_get_users_courses`, `core_course_get_contents`, `mod_assign_get_assignments`). Per tant, funciona amb **qualsevol campus virtual Moodle** d'una universitat, institut o escola que tingui activada l'API mòbil (Atenea UPC, UB, UAB, UPF, etc.).
+
+- En executar `python get_token.py`, només cal escriure la URL base del teu Moodle (o prémer `Enter` per utilitzar `https://atenea.upc.edu` per defecte), que quedarà desada a `"base_url"` dins de `config.json`.
+- Si el teu Moodle no utilitza l'enllaç de l'app mòbil (`launch.php`), també pots obtenir el token del servei **`Moodle mobile web service`** des del teu perfil del campus (*Preferències → Claus de seguretat*) i posar manualment `{"base_url": "https://el-teu-moodle.edu", "token": "..."}` dins de `config.json`.
+
 ## Requisits
 
 - Python 3.9 o superior (només llibreria estàndard, no cal instal·lar cap paquet).
@@ -34,11 +50,11 @@ Sincronitzador automàtic dels documents d'[Atenea (Moodle UPC)](https://atenea.
 
 ## Inici ràpid
 
-1. **Obtén el token d'Atenea** (la primera vegada o quan caduqui):
+1. **Obtén el token del teu Moodle** (la primera vegada o quan caduqui):
    ```powershell
    python get_token.py
    ```
-   Això crea `config.json` en local amb el teu token (no es puja mai a Git).
+   Introdueix la URL del teu Moodle (per defecte `https://atenea.upc.edu`) i segueix les instruccions. Això crea `config.json` en local amb el teu token (no es puja mai a Git).
 
 2. **Sincronitza les assignatures i genera l'índex**:
    ```powershell

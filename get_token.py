@@ -1,11 +1,11 @@
-"""Obtiene un token nuevo de Atenea (login UPC por CAS) y lo guarda en config.json.
+"""Obtiene un token de Moodle (por defecto Atenea UPC) y lo guarda en config.json.
 
-Atenea no permite pedir el token con usuario/contraseña porque el login es por CAS,
-así que usamos el mismo flujo que la app móvil de Moodle (launch.php). Con el
-parámetro "confirmed" Atenea muestra el enlace con el token en la página en lugar
-de redirigir directamente a la app.
+Funciona con cualquier instancia de Moodle que tenga activados los Moodle Mobile
+Web Services (incluidos campus con login SSO/CAS como Atenea). Con el parámetro
+"confirmed" Moodle muestra el enlace con el token en la página en lugar de
+redirigir directamente a la app móvil.
 
-Los tokens caducan (~2 meses). Cuando pase, sync.log dirá "¿token caducado?".
+Los tokens suelen caducar (~2 meses). Cuando pase, sync.log dirá "¿token caducado?".
 """
 import base64
 import json
@@ -17,18 +17,28 @@ import urllib.request
 import webbrowser
 from pathlib import Path
 
-BASE_URL = "https://atenea.upc.edu"
+DEFAULT_BASE_URL = "https://atenea.upc.edu"
+BASE_URL = DEFAULT_BASE_URL
 CONFIG_FILE = Path(__file__).resolve().parent / "config.json"
 
 
 def main():
     config = json.loads(CONFIG_FILE.read_text(encoding="utf-8")) if CONFIG_FILE.exists() else {}
-    userid = config.get("userid") or input("Tu id de usuario de Atenea (sale en la URL de tu perfil, ?id=...): ").strip()
+    raw_url = (
+        config.get("base_url")
+        or input(f"URL del teu Moodle [{DEFAULT_BASE_URL}]: ").strip()
+        or DEFAULT_BASE_URL
+    )
+    if not raw_url.lower().startswith(("http://", "https://")):
+        raw_url = "https://" + raw_url
+    base_url = raw_url.rstrip("/")
+
+    userid = config.get("userid") or input("Tu id de usuario en Moodle (sale en la URL de tu perfil, ?id=...): ").strip()
     passport = random.randint(10**8, 10**9)
-    url = (f"{BASE_URL}/admin/tool/mobile/launch.php?service=moodle_mobile_app"
+    url = (f"{base_url}/admin/tool/mobile/launch.php?service=moodle_mobile_app"
            f"&passport={passport}&urlscheme=moodledownloader&confirmed={userid}")
 
-    print("1) Entra en https://atenea.upc.edu con tu usuario UPC (si no lo estás ya).")
+    print(f"1) Entra en {base_url} con tu usuario (si no lo estás ya).")
     input("   Pulsa Enter cuando hayas iniciado sesión...")
     print("\n2) Abro esta página (si no se abre, cópiala en el navegador):\n\n   " + url + "\n")
     webbrowser.open(url)
@@ -44,12 +54,12 @@ def main():
 
     body = urllib.parse.urlencode({"wstoken": token, "wsfunction": "core_webservice_get_site_info",
                                    "moodlewsrestformat": "json"}).encode()
-    with urllib.request.urlopen(f"{BASE_URL}/webservice/rest/server.php", body, timeout=30) as r:
+    with urllib.request.urlopen(f"{base_url}/webservice/rest/server.php", body, timeout=30) as r:
         info = json.load(r)
     if "exception" in info:
         sys.exit(f"El token no funciona: {info.get('message')}")
 
-    config.update({"token": token, "userid": info["userid"]})
+    config.update({"base_url": base_url, "token": token, "userid": info["userid"]})
     config.setdefault("download_videos", True)
     config.setdefault("max_repo_file_mb", 50)
     CONFIG_FILE.write_text(json.dumps(config, indent=2), encoding="utf-8")
