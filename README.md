@@ -92,8 +92,31 @@ Pots crear un fitxer local `subjects.json` (ignorat per Git) mapejant el codi d'
 }
 ```
 
+## Enllaçar carpetes personals i protegir els arxius del Moodle (opcional)
+
+Pots enllaçar les teves carpetes d'apunts, resums o exercicis per veure'ls separats dels arxius dels professors (pestanyes `Atenea` · `Els meus` · `Tots` i vista `General` a la barra lateral) sense barrejar-los:
+
+1. Crea un fitxer local `personal_sources.json` (ignorat per Git) indicant les rutes (relatives o absolutes):
+
+```json
+{
+  "general": {
+    "label": "General",
+    "path": "..",
+    "recursive": false
+  },
+  "subjects": {
+    "240052": { "path": "..\\TERMO", "recursive": false },
+    "240043": { "path": "..\\DINAMICA", "recursive": false }
+  }
+}
+```
+
+2. **Protecció contra edició (`Només lectura`)**: per defecte a Windows (`"readonly_downloads": true` a `config.json`), `sync_atenea.py` marca tots els arxius descarregats d'`Assignatures/` com a només lectura perquè no es puguin sobreescriure accidentalment (pots aplicar-ho als arxius existents amb `python sync_atenea.py --apply-readonly`).
+3. **Editar una còpia (`✎ Editar còpia`)**: des del visor en mode servidor, qualsevol arxiu del Moodle es pot copiar amb un clic a l'arrel de la teva carpeta personal i obrir-lo per subratllar o editar-lo (si ja existeix una còpia prèvia, l'obre directament sense sobreescriure les teves anotacions). Els teus fitxers `.html` interactius s'executen directament al panell lateral amb JavaScript, `localStorage` i recursos relatius actius.
+
 ## Seguretat i privacitat
 
-- `Assignatures/`, `config.json`, `sync.log`, `catalog.js`, `ui_state.json` i `subjects.json` estan exclosos a `.gitignore`.
+- `Assignatures/`, `config.json`, `sync.log`, `catalog.js`, `ui_state.json`, `subjects.json` i `personal_sources.json` estan exclosos a `.gitignore`.
 - `build_index.py` només llegeix `max_repo_file_mb` de `config.json`; el token no s'inclou mai a `catalog.js`.
-- `serve.py` només escolta a `127.0.0.1`, bloqueja el traversal de rutes i l'accés a fitxers fora d'`Assignatures/`, i exigeix validació de capçaleres locals per a les accions `POST /api/*`.
+- `serve.py` només escolta a `127.0.0.1`, bloqueja el traversal de rutes i l'accés a fitxers fora de les carpetes configurades (incloent `config.json` i secrets), i exigeix validació de capçaleres locals per a les accions `POST /api/*`.

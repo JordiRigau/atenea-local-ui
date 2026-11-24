@@ -19,6 +19,11 @@ LOG_FILE = ROOT / "sync.log"
 OUT_FILE = ROOT / "catalog.js"
 CONFIG_FILE = ROOT / "config.json"
 SUBJECTS_FILE = ROOT / "subjects.json"
+PERSONAL_FILE = ROOT / "personal_sources.json"
+
+IGNORED_PERSONAL_NAMES = {"desktop.ini", "thumbs.db"}
+SKIP_PERSONAL_PREFIXES = (".", "~$")
+SKIP_PERSONAL_SUFFIXES = (".tmp", ".part", ".pyc")
 
 VIDEO_EXTS = {
     ".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v",
@@ -340,11 +345,188 @@ def _parse_ts(ts_str: str | None) -> float:
         return 0.0
 
 
+def _resolve_source_dir(raw_path: object) -> Path | None:
+    if not isinstance(raw_path, str) or not raw_path.strip():
+        return None
+    p = Path(raw_path.strip())
+    target = (p if p.is_absolute() else (ROOT / p)).resolve()
+    return target if target.is_dir() else None
+
+
+def load_personal_sources() -> dict:
+    """Llegeix personal_sources.json amb la carpeta general i les carpetes per assignatura."""
+    empty = {"general": None, "subjects": {}}
+    if not PERSONAL_FILE.exists():
+        return empty
+    try:
+        raw = json.loads(PERSONAL_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return empty
+    if not isinstance(raw, dict):
+        return empty
+
+    general = None
+    raw_gen = raw.get("general")
+    if isinstance(raw_gen, dict):
+        g_dir = _resolve_source_dir(raw_gen.get("path"))
+        if g_dir is not None:
+            general = {
+                "id": "general",
+                "label": str(raw_gen.get("label") or "General"),
+                "dir": g_dir,
+                "recursive": bool(raw_gen.get("recursive", False)),
+            }
+
+    subjects: dict[str, dict] = {}
+    raw_subjs = raw.get("subjects")
+    if isinstance(raw_subjs, dict):
+        for sid, entry in raw_subjs.items():
+            sid_str = str(sid).strip()
+            if not sid_str:
+                continue
+            if isinstance(entry, str):
+                s_dir = _resolve_source_dir(entry)
+                rec = False
+            elif isinstance(entry, dict):
+                s_dir = _resolve_source_dir(entry.get("path"))
+                rec = bool(entry.get("recursive", False))
+            else:
+                continue
+            if s_dir is not None:
+                subjects[sid_str] = {"id": sid_str, "dir": s_dir, "recursive": rec}
+
+    return {"general": general, "subjects": subjects}
+
+
+def make_file_href(full_path: Path) -> str:
+    """Calcula un href compatible amb file:// relatiu a ROOT (o file:/// URI si canvia d'unitat)."""
+    try:
+        rel_from_root = os.path.relpath(full_path, ROOT)
+    except ValueError:
+        return full_path.as_uri()
+    parts = Path(rel_from_root).parts
+    return "/".join(p if p in (".", "..") else urllib.parse.quote(p, safe="") for p in parts)
+
+
+def _should_skip_personal(name: str) -> bool:
+    low = name.lower()
+    return (
+        low in IGNORED_PERSONAL_NAMES
+        or name.startswith(SKIP_PERSONAL_PREFIXES)
+        or low.endswith(SKIP_PERSONAL_SUFFIXES)
+    )
+
+
+def _iter_personal_files(base_dir: Path, recursive: bool) -> list[Path]:
+    out: list[Path] = []
+    if not recursive:
+        try:
+            entries = sorted(base_dir.iterdir(), key=lambda p: natural_key(p.name))
+        except OSError:
+            return out
+        for p in entries:
+            if p.is_file() and not _should_skip_personal(p.name):
+                out.append(p)
+        return out
+
+    for dirpath, dirnames, filenames in os.walk(base_dir):
+        dirnames[:] = sorted(
+            [d for d in dirnames if not d.startswith(".") and d != "__pycache__"],
+            key=natural_key,
+        )
+        cur = Path(dirpath)
+        for fname in sorted(filenames, key=natural_key):
+            if not _should_skip_personal(fname):
+                out.append(cur / fname)
+    return out
+
+
+def _scan_personal_source(
+    source_id: str,
+    subject_id: str,
+    base_dir: Path,
+    recursive: bool,
+    text_contents: dict[str, str],
+    by_kind: dict[str, int],
+) -> tuple[list[dict], int]:
+    """Escaneja una carpeta personal i retorna (llista_registres, bytes_totals)."""
+    records: list[tuple[tuple, dict]] = []
+    src_bytes = 0
+    for full_path in _iter_personal_files(base_dir, recursive):
+        try:
+            st = full_path.stat()
+        except OSError:
+            continue
+        rel_path = full_path.relative_to(base_dir)
+        rel_parts = rel_path.parts
+        rel_posix = "/".join(rel_parts)
+        fav_key = f"personal:{source_id}/{rel_posix}"
+        section = "" if len(rel_parts) == 1 else rel_parts[0]
+        subpath = [] if len(rel_parts) <= 2 else list(rel_parts[1:-1])
+
+        ext = full_path.suffix.lower()
+        ext_clean = ext[1:] if ext.startswith(".") else ""
+        kind = classify_kind(ext)
+        size = int(st.st_size)
+        mtime = int(st.st_mtime)
+        href = (
+            "personal/"
+            + urllib.parse.quote(source_id, safe="")
+            + "/"
+            + "/".join(urllib.parse.quote(p, safe="") for p in rel_parts)
+        )
+
+        rec: dict = {
+            "id": 0,
+            "origin": "personal",
+            "sourceId": source_id,
+            "subjectId": subject_id,
+            "section": section,
+            "subpath": subpath,
+            "name": full_path.name,
+            "ext": ext_clean,
+            "kind": kind,
+            "rel": rel_posix,
+            "favKey": fav_key,
+            "href": href,
+            "fileHref": make_file_href(full_path),
+            "fullPath": str(full_path),
+            "size": size,
+            "mtime": mtime,
+            "localOnly": True,
+        }
+
+        if ext == ".url":
+            target_url, is_yt = extract_url_target(full_path)
+            if target_url:
+                rec["targetUrl"] = target_url
+            if is_yt:
+                rec["isYoutube"] = True
+        elif ext in TEXT_EXTS and size <= MAX_TEXT_BYTES:
+            try:
+                text_contents[fav_key] = full_path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                pass
+
+        src_bytes += size
+        by_kind[kind] = by_kind.get(kind, 0) + 1
+        sort_key = (
+            natural_key(section),
+            tuple(natural_key(p) for p in subpath),
+            natural_key(full_path.name),
+        )
+        records.append((sort_key, rec))
+
+    records.sort(key=lambda pair: pair[0])
+    return [rec for _, rec in records], src_bytes
+
+
 def build_catalog() -> dict:
-    """Escaneja Assignatures/ i construeix l'estructura completa del catàleg."""
+    """Escaneja Assignatures/ i carpetes personals i construeix el catàleg complet."""
     now_ts = time.time()
     max_bytes = get_max_repo_bytes()
     subject_overrides = load_subject_overrides()
+    personal_cfg = load_personal_sources()
     sync_info = parse_sync_log()
     file_events: dict[str, dict[str, str]] = sync_info["fileEvents"]
 
@@ -354,6 +536,8 @@ def build_catalog() -> dict:
     text_contents: dict[str, str] = {}
     by_kind: dict[str, int] = {}
     total_bytes = 0
+    atenea_files_count = 0
+    personal_files_count = 0
 
     if DOCS_DIR.exists():
         subject_dirs = sorted(
@@ -404,6 +588,8 @@ def build_catalog() -> dict:
 
                 record: dict = {
                     "id": 0,
+                    "origin": "atenea",
+                    "sourceId": subj_id,
                     "subjectId": subj_id,
                     "section": section,
                     "subpath": subpath,
@@ -411,7 +597,9 @@ def build_catalog() -> dict:
                     "ext": ext_clean,
                     "kind": kind,
                     "rel": rel_posix,
+                    "favKey": rel_posix,
                     "href": href,
+                    "fullPath": str(full_path),
                     "size": size,
                     "mtime": mtime,
                     "localOnly": local_only,
@@ -459,6 +647,21 @@ def build_catalog() -> dict:
         for _, rec in subj_files:
             rec["id"] = len(files)
             files.append(rec)
+        atenea_files_count += len(subj_files)
+
+        p_entry = personal_cfg["subjects"].get(subj_id)
+        p_records: list[dict] = []
+        p_bytes = 0
+        if p_entry is not None:
+            p_records, p_bytes = _scan_personal_source(
+                subj_id, subj_id, p_entry["dir"], p_entry["recursive"], text_contents, by_kind
+            )
+            for rec in p_records:
+                rec["id"] = len(files)
+                files.append(rec)
+            personal_files_count += len(p_records)
+            total_bytes += p_bytes
+            subj_bytes += p_bytes
 
         sections_sorted = sorted(subj_sections_set, key=natural_key)
         subjects.append(
@@ -469,18 +672,42 @@ def build_catalog() -> dict:
                 "name": name,
                 "colorLight": c_light,
                 "colorDark": c_dark,
-                "fileCount": len(subj_files),
+                "ateneaCount": len(subj_files),
+                "personalCount": len(p_records),
+                "hasPersonalDir": p_entry is not None,
+                "fileCount": len(subj_files) + len(p_records),
                 "totalBytes": subj_bytes,
                 "recentCount": subj_recent,
                 "sections": sections_sorted,
             }
         )
 
+    personal_general = None
+    gen_entry = personal_cfg["general"]
+    if gen_entry is not None:
+        g_records, g_bytes = _scan_personal_source(
+            "general", "general", gen_entry["dir"], gen_entry["recursive"], text_contents, by_kind
+        )
+        for rec in g_records:
+            rec["id"] = len(files)
+            files.append(rec)
+        personal_files_count += len(g_records)
+        total_bytes += g_bytes
+        personal_general = {
+            "id": "general",
+            "label": gen_entry["label"],
+            "dir": str(gen_entry["dir"]),
+            "fileCount": len(g_records),
+            "totalBytes": g_bytes,
+        }
+
     return {
         "generatedAt": time.strftime("%Y-%m-%d %H:%M:%S"),
         "rootPath": str(DOCS_DIR),
         "stats": {
             "subjects": len(subjects),
+            "ateneaFiles": atenea_files_count,
+            "personalFiles": personal_files_count,
             "files": len(files),
             "totalBytes": total_bytes,
             "byKind": by_kind,
@@ -490,6 +717,7 @@ def build_catalog() -> dict:
             "lastRunWithChanges": sync_info["lastRunWithChanges"],
             "recentRuns": sync_info["recentRuns"],
         },
+        "personalGeneral": personal_general,
         "subjects": subjects,
         "files": files,
         "htmlContents": html_contents,

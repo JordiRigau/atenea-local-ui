@@ -12,6 +12,7 @@ import html
 import json
 import os
 import re
+import stat
 import sys
 import time
 import urllib.parse
@@ -51,6 +52,37 @@ def clean(name, maxlen=80):
     return name or "_"
 
 
+def make_writable(path: Path):
+    if path.exists():
+        try:
+            os.chmod(path, path.stat().st_mode | stat.S_IWRITE | stat.S_IREAD)
+        except OSError:
+            pass
+
+
+def make_readonly(path: Path):
+    if path.exists():
+        try:
+            os.chmod(path, (path.stat().st_mode | stat.S_IREAD) & ~(stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH))
+        except OSError:
+            pass
+
+
+def apply_readonly_tree(root_dir: Path) -> int:
+    if not root_dir.exists():
+        return 0
+    count = 0
+    for dirpath, dirnames, filenames in os.walk(root_dir):
+        dirnames[:] = [d for d in dirnames if not d.startswith(".")]
+        cur = Path(dirpath)
+        for fname in filenames:
+            if fname.startswith(".") or fname.endswith(".part"):
+                continue
+            make_readonly(cur / fname)
+            count += 1
+    return count
+
+
 class Moodle:
     def __init__(self, token, base_url=DEFAULT_BASE_URL):
         self.token = token
@@ -66,7 +98,7 @@ class Moodle:
             raise RuntimeError(f"{function}: {result.get('errorcode')} - {result.get('message')}")
         return result
 
-    def download(self, fileurl, dest, timemodified):
+    def download(self, fileurl, dest, timemodified, readonly=True):
         sep = "&" if "?" in fileurl else "?"
         url = f"{fileurl}{sep}token={urllib.parse.quote(self.token)}"
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -74,9 +106,13 @@ class Moodle:
         with urllib.request.urlopen(url, timeout=300) as r, open(tmp, "wb") as f:
             while chunk := r.read(1 << 20):
                 f.write(chunk)
+        if dest.exists():
+            make_writable(dest)
         os.replace(tmp, dest)
         if timemodified:
             os.utime(dest, (timemodified, timemodified))
+        if readonly:
+            make_readonly(dest)
 
 
 def flatten(params, prefix=""):
@@ -173,13 +209,20 @@ def update_large_file_excludes(large_paths):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--apply-readonly", action="store_true")
     args = parser.parse_args()
+
+    if args.apply_readonly:
+        count = apply_readonly_tree(DOCS_DIR)
+        print(f"Solo lectura aplicado a {count} archivos en {DOCS_DIR}", flush=True)
+        sys.exit(0)
 
     if not CONFIG_FILE.exists():
         sys.exit(f"Falta {CONFIG_FILE.name}. Ejecuta primero: python get_token.py")
     config = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
     base_url = (config.get("base_url") or DEFAULT_BASE_URL).rstrip("/")
     download_videos = config.get("download_videos", True)
+    readonly_downloads = config.get("readonly_downloads", True)
     max_bytes = config.get("max_repo_file_mb", 50) * 1024 * 1024
     moodle = Moodle(config["token"], base_url=base_url)
 
@@ -218,7 +261,11 @@ def main():
                 if not dest.exists() or dest.read_text(encoding="utf-8") != content:
                     if not args.dry_run:
                         dest.parent.mkdir(parents=True, exist_ok=True)
+                        if dest.exists():
+                            make_writable(dest)
                         dest.write_text(content, encoding="utf-8")
+                        if readonly_downloads:
+                            make_readonly(dest)
                     new += 1
                 continue
 
@@ -240,7 +287,7 @@ def main():
                 new += 1
                 continue
             try:
-                moodle.download(f["fileurl"], dest, tm)
+                moodle.download(f["fileurl"], dest, tm, readonly=readonly_downloads)
                 if dest.stat().st_size > max_bytes:
                     large.add(Path("Assignatures") / rel)
                 updated += existed
@@ -251,6 +298,8 @@ def main():
 
     if not args.dry_run:
         update_large_file_excludes(large)
+        if readonly_downloads:
+            apply_readonly_tree(DOCS_DIR)
     log(f"Hecho: {new} nuevos, {updated} actualizados, {len(large)} grandes/vídeos solo en local, "
         f"{skipped_videos} vídeos omitidos, {errors} errores")
     sys.exit(1 if errors else 0)

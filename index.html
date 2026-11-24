@@ -372,6 +372,18 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{
 .tag-new{ background:color-mix(in srgb,var(--ok) 16%,transparent); color:var(--ok); }
 .tag-upd{ background:color-mix(in srgb,var(--accent) 16%,transparent); color:var(--accent); }
 .tag-local{ background:var(--paper); color:var(--muted); border:1px solid var(--line); }
+.tag-mine{ background:color-mix(in srgb,var(--c) 14%,transparent); color:var(--c); border:1px solid color-mix(in srgb,var(--c) 35%,transparent); }
+
+.subj-tabs{
+  display:inline-flex; gap:2px; padding:2px;
+  border:1px solid var(--line); border-radius:7px; background:var(--surface);
+}
+.subj-tab{
+  padding:4px 10px; border:none; border-radius:5px;
+  background:transparent; font-size:12px; color:var(--muted); white-space:nowrap;
+}
+.subj-tab:hover{ color:var(--ink); }
+.subj-tab.active{ background:var(--ink); color:var(--surface); font-weight:500; }
 
 .file-sub{
   font-size:11.5px; color:var(--muted); margin-top:1px;
@@ -558,6 +570,11 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{
           <span class="lbl">Preferits</span>
           <span id="cnt-favs" class="badge">0</span>
         </button>
+        <button id="nav-general" class="nav-btn" data-view="general" style="--c:var(--accent);display:none">
+          <span class="ico">▤</span>
+          <span class="lbl" id="lbl-general">General (UNI)</span>
+          <span id="cnt-general" class="badge">0</span>
+        </button>
       </div>
 
       <div class="nav-group">
@@ -584,6 +601,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{
       </div>
       <div class="top-right">
         <div id="sync-card" class="sync-card"></div>
+        <button id="refresh-btn" class="btn" style="display:none" title="Actualitzar índex local (sense connectar amb Moodle)">↻</button>
         <button id="sync-btn" class="btn primary" style="display:none">Sincronitzar ara</button>
         <button id="theme-btn" class="btn">Mode fosc</button>
       </div>
@@ -632,8 +650,9 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{
   ];
 
   var state = {
-    view: "recent",        // "recent" | "favs" | "subject"
+    view: "recent",        // "recent" | "favs" | "general" | "subject"
     subjectId: null,
+    subjectTab: "atenea",  // "atenea" | "personal" | "all"
     recentWindow: "7d",    // "last" | "7d" | "30d"
     kind: "all",
     sort: "atenea",        // "atenea" | "recent" | "name" | "size"
@@ -690,6 +709,10 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{
     if (!DATA) return keys;
     (DATA.files || []).forEach(function(f){
       if (f.subjectId !== subjectId) return;
+      if (f.origin === "personal") {
+        keys.add(subjectId + "::personal");
+        return;
+      }
       var sec = f.section || "";
       keys.add(subjectId + "::" + sec);
       var parts = f.subpath || [];
@@ -800,7 +823,14 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{
     if (f.kind === "archive") return { label: (f.ext || "ZIP").toUpperCase().slice(0, 5), cls: "k-archive" };
     return { label: (f.ext || "ARXIU").toUpperCase().slice(0, 5), cls: "k-other" };
   }
+  function fileKey(f){
+    return f.favKey || f.rel;
+  }
+  function fileUrl(f){
+    return IS_SERVER ? f.href : (f.fileHref || f.href);
+  }
   function windowsFullPath(f){
+    if (f.fullPath) return f.fullPath;
     var root = (DATA && DATA.rootPath) ? DATA.rootPath.replace(/[\\/]+$/, "") : "";
     var relWin = f.rel.replace(/\//g, "\\");
     return root ? (root + "\\" + relWin) : relWin;
@@ -839,6 +869,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{
     fileMap = {};
     if (!DATA) return;
     (DATA.subjects || []).forEach(function(s){ subjMap[s.id] = s; });
+    var genLabel = (DATA.personalGeneral && DATA.personalGeneral.label) ? DATA.personalGeneral.label : "General";
     (DATA.files || []).forEach(function(f){
       fileMap[f.id] = f;
       var s = subjMap[f.subjectId];
@@ -846,14 +877,18 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{
         f.name,
         f.section,
         (f.subpath || []).join(" "),
-        s ? s.name : "",
+        s ? s.name : (f.subjectId === "general" ? genLabel : ""),
         s ? s.code : "",
+        f.origin === "personal" ? "meu personal" : "atenea",
         f.targetUrl || ""
       ].join(" "));
     });
     if (state.view === "subject" && !subjMap[state.subjectId]) {
       state.view = "recent";
       state.subjectId = null;
+    }
+    if (state.view === "general" && !DATA.personalGeneral) {
+      state.view = "recent";
     }
     if (state.selectedId != null && !fileMap[state.selectedId]) {
       state.selectedId = null;
@@ -864,20 +899,31 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{
     if (isGlobalSearchActive()) {
       return files;
     }
+    if (state.view === "general") {
+      return files.filter(function(f){ return f.origin === "personal" && f.sourceId === "general"; });
+    }
     if (state.view === "subject" && state.subjectId) {
-      return files.filter(function(f){ return f.subjectId === state.subjectId; });
+      var s = subjMap[state.subjectId];
+      var hasTabs = !!(s && (s.hasPersonalDir || s.personalCount > 0));
+      return files.filter(function(f){
+        if (f.subjectId !== state.subjectId) return false;
+        if (!hasTabs || state.subjectTab === "all") return true;
+        if (state.subjectTab === "personal") return f.origin === "personal";
+        return f.origin !== "personal";
+      });
     }
     if (state.view === "favs") {
-      return files.filter(function(f){ return state.favs.has(f.rel); });
+      return files.filter(function(f){ return state.favs.has(fileKey(f)); });
     }
     if (state.view === "recent") {
       var nowMs = DATA && DATA.generatedAt ? parseLogTs(DATA.generatedAt) : Date.now();
+      var ateneaFiles = files.filter(function(f){ return f.origin !== "personal"; });
       if (state.recentWindow === "last") {
         var last = DATA.sync && DATA.sync.lastSync;
         if (!last || (last.new + last.updated) === 0) return [];
         var startMs = parseLogTs(last.startedAt);
         var endMs = parseLogTs(last.finishedAt) || startMs;
-        return files.filter(function(f){
+        return ateneaFiles.filter(function(f){
           if (!f.syncedAt) return false;
           var t = parseLogTs(f.syncedAt);
           return t >= startMs && t <= endMs;
@@ -885,7 +931,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{
       }
       var days = state.recentWindow === "30d" ? 30 : 7;
       var cutoff = nowMs - days * DAY_MS;
-      return files.filter(function(f){ return getFileActivityMs(f) >= cutoff; });
+      return ateneaFiles.filter(function(f){ return getFileActivityMs(f) >= cutoff; });
     }
     return files;
   }
@@ -930,11 +976,20 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{
     var nowMs = DATA.generatedAt ? parseLogTs(DATA.generatedAt) : Date.now();
     var recent7Count = 0;
     (DATA.files || []).forEach(function(f){
-      if (nowMs - getFileActivityMs(f) <= 7 * DAY_MS) recent7Count++;
+      if (f.origin !== "personal" && (nowMs - getFileActivityMs(f)) <= 7 * DAY_MS) recent7Count++;
     });
 
     document.getElementById("cnt-recent").textContent = fmtNum(recent7Count);
     document.getElementById("cnt-favs").textContent = fmtNum(state.favs.size);
+
+    var navGen = document.getElementById("nav-general");
+    if (DATA.personalGeneral) {
+      navGen.style.display = "";
+      document.getElementById("lbl-general").textContent = DATA.personalGeneral.label || "General (UNI)";
+      document.getElementById("cnt-general").textContent = fmtNum(DATA.personalGeneral.fileCount || 0);
+    } else {
+      navGen.style.display = "none";
+    }
 
     document.querySelectorAll(".nav-btn[data-view]").forEach(function(btn){
       var v = btn.getAttribute("data-view");
@@ -944,7 +999,10 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{
     var subjHtml = (DATA.subjects || []).map(function(s){
       var active = state.view === "subject" && state.subjectId === s.id;
       var c = subjectColor(s);
-      return '<button class="nav-btn' + (active ? ' active' : '') + '" data-subject="' + esc(s.id) + '" style="--c:' + esc(c) + '">' +
+      var tip = s.hasPersonalDir
+        ? (s.ateneaCount + " d'Atenea · " + s.personalCount + " meus")
+        : (s.fileCount + " arxius");
+      return '<button class="nav-btn' + (active ? ' active' : '') + '" data-subject="' + esc(s.id) + '" style="--c:' + esc(c) + '" title="' + esc(tip) + '">' +
         '<span class="dot"></span>' +
         '<span class="lbl">' + esc(s.name) + (s.code ? '<span class="subcode">' + esc(s.code) + '</span>' : '') + '</span>' +
         (s.recentCount > 0 ? '<span class="new-dot" title="' + s.recentCount + ' recents (7 dies)"></span>' : '') +
@@ -1015,14 +1073,17 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{
     var globalSearch = isGlobalSearchActive();
     var title = "Novetats";
     var color = "var(--accent)";
+    var genLabel = (DATA.personalGeneral && DATA.personalGeneral.label) ? DATA.personalGeneral.label : "General (UNI)";
+    var s = (state.view === "subject" && subjMap[state.subjectId]) ? subjMap[state.subjectId] : null;
 
     if (globalSearch) {
       title = "Resultats de la cerca";
     } else if (state.view === "favs") {
       title = "Preferits";
       color = "var(--star)";
-    } else if (state.view === "subject" && subjMap[state.subjectId]) {
-      var s = subjMap[state.subjectId];
+    } else if (state.view === "general") {
+      title = genLabel;
+    } else if (s) {
       title = s.name;
       color = subjectColor(s);
     }
@@ -1038,10 +1099,12 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{
     var tools = "";
     if (globalSearch) {
       var scopeBack = "";
-      if (state.view === "subject" && subjMap[state.subjectId]) {
-        scopeBack = '<button class="btn" id="btn-scope-local">Només a ' + esc(subjMap[state.subjectId].name) + '</button>';
+      if (s) {
+        scopeBack = '<button class="btn" id="btn-scope-local">Només a ' + esc(s.name) + '</button>';
       } else if (state.view === "favs") {
         scopeBack = '<button class="btn" id="btn-scope-local">Només a Preferits</button>';
+      } else if (state.view === "general") {
+        scopeBack = '<button class="btn" id="btn-scope-local">Només a ' + esc(genLabel) + '</button>';
       }
       tools = scopeBack + '<button class="btn" id="btn-clear-search">Netejar cerca</button>' + sortSelect;
     } else if (state.view === "recent") {
@@ -1053,9 +1116,20 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{
           '<button class="chip' + (win === "30d" ? ' active' : '') + '" data-win="30d">Últims 30 dies</button>' +
         '</div>';
     } else {
-      var showTreeBtns = (state.view === "subject" && state.sort === "atenea");
+      var hasTabs = !!(s && (s.hasPersonalDir || s.personalCount > 0));
+      var tabsHtml = "";
+      if (hasTabs) {
+        tabsHtml =
+          '<div class="subj-tabs" role="tablist">' +
+            '<button class="subj-tab' + (state.subjectTab === "atenea" ? ' active' : '') + '" data-stab="atenea">Atenea (' + fmtNum(s.ateneaCount) + ')</button>' +
+            '<button class="subj-tab' + (state.subjectTab === "personal" ? ' active' : '') + '" data-stab="personal">Els meus (' + fmtNum(s.personalCount) + ')</button>' +
+            '<button class="subj-tab' + (state.subjectTab === "all" ? ' active' : '') + '" data-stab="all">Tots (' + fmtNum(s.fileCount) + ')</button>' +
+          '</div>';
+      }
+      var showTreeBtns = (state.view === "subject" && state.sort === "atenea" && (!hasTabs || state.subjectTab !== "personal"));
       tools =
-        (hasQuery ? '<button class="btn" id="btn-search-global">Cercar a totes les assignatures</button>' : '') +
+        tabsHtml +
+        (hasQuery ? '<button class="btn" id="btn-search-global">Cercar a tot arreu</button>' : '') +
         (showTreeBtns
           ? '<button class="btn" id="btn-expand-all">Desplegar tot</button><button class="btn" id="btn-collapse-all">Plegar tot</button>'
           : '') +
@@ -1075,40 +1149,46 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{
   function renderFileRow(f, opts){
     opts = opts || {};
     var subj = subjMap[f.subjectId];
-    var c = subjectColor(subj);
+    var isPersonal = f.origin === "personal";
+    var c = (isPersonal && f.sourceId === "general") ? "var(--accent)" : subjectColor(subj);
     var kb = kindBadge(f);
-    var isStar = state.favs.has(f.rel);
+    var isStar = state.favs.has(fileKey(f));
     var isSel = state.selectedId === f.id;
-    var recent7 = isRecent7d(f);
+    var recent7 = !isPersonal && isRecent7d(f);
     var actionTag = "";
     if (recent7 && f.syncAction === "new") actionTag = '<span class="tag tag-new">Nou</span>';
     else if (recent7 && f.syncAction === "updated") actionTag = '<span class="tag tag-upd">Act.</span>';
 
-    var localTag = f.localOnly ? '<span class="tag tag-local" title="Només en local (vídeo o > 50 MB)">Local</span>' : '';
+    var mineTag = (isPersonal && opts.showMineTag) ? '<span class="tag tag-mine">Meu</span>' : '';
+    var localTag = (!isPersonal && f.localOnly) ? '<span class="tag tag-local" title="Només en local (vídeo o > 50 MB)">Local</span>' : '';
 
     var subLine = "";
     if (f.kind === "url" && f.targetUrl) {
       subLine = f.targetUrl.replace(/^https?:\/\//i, "");
     }
     var crumbParts = [];
-    if (opts.showSubject && subj) crumbParts.push(subj.name);
+    if (opts.showSubject) {
+      if (subj) crumbParts.push(subj.name);
+      else if (isPersonal && f.sourceId === "general" && DATA.personalGeneral) crumbParts.push(DATA.personalGeneral.label || "General (UNI)");
+    }
     if (opts.showSection && f.section) crumbParts.push(cleanSectionName(f.section));
     if (opts.showSubpath && f.subpath && f.subpath.length) crumbParts.push(f.subpath.join(" / "));
     var crumbText = crumbParts.join(" · ");
 
-    var openHref = (f.kind === "url" && f.targetUrl) ? f.targetUrl : f.href;
+    var openHref = (f.kind === "url" && f.targetUrl) ? f.targetUrl : fileUrl(f);
     var openRel = (f.kind === "url") ? 'noopener noreferrer' : 'noopener';
+    var canFork = IS_SERVER && !isPersonal && f.kind !== "url" && subj && subj.hasPersonalDir;
 
     return '<div class="file-row' + (isSel ? ' selected' : '') + '" data-fid="' + f.id + '" style="--c:' + esc(c) + ';--depth:' + (opts.depth || 0) + '">' +
       '<span class="kind-pill ' + kb.cls + '">' + esc(kb.label) + '</span>' +
       '<div class="file-info">' +
         '<div class="file-title">' +
           '<span class="file-name" title="' + esc(f.name) + '">' + esc(displayFileName(f)) + '</span>' +
-          actionTag + localTag +
+          mineTag + actionTag + localTag +
         '</div>' +
         ((crumbText || subLine)
           ? '<div class="file-sub">' +
-              (opts.showSubject && subj ? '<span class="subj-dot"></span>' : '') +
+              (opts.showSubject ? '<span class="subj-dot"></span>' : '') +
               '<span>' + esc([crumbText, subLine].filter(Boolean).join(" · ")) + '</span>' +
             '</div>'
           : '') +
@@ -1121,6 +1201,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{
         '<button class="icon-btn' + (isStar ? ' starred' : '') + '" data-act="star" title="' + (isStar ? 'Treure de preferits' : 'Afegir a preferits') + '">' + (isStar ? '★' : '☆') + '</button>' +
         '<a class="icon-btn" href="' + esc(openHref) + '" target="_blank" rel="' + openRel + '" data-act="ext" title="Obrir en una pestanya nova">↗</a>' +
         '<button class="icon-btn" data-act="copy" title="Copiar ruta completa">⧉</button>' +
+        (canFork ? '<button class="icon-btn" data-act="fork" title="Copiar als meus arxius i obrir per editar">✎</button>' : '') +
         (IS_SERVER
           ? '<button class="icon-btn" data-act="open" title="Obrir al sistema">▶</button>' +
             '<button class="icon-btn" data-act="reveal" title="Mostrar a la carpeta">📁</button>'
@@ -1213,12 +1294,18 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{
     }
 
     if (!visibleFiles.length) {
-      if ((state.view === "subject" || state.view === "favs") && state.query.trim() && !state.searchGlobal) {
+      if ((state.view === "subject" || state.view === "favs" || state.view === "general") && state.query.trim() && !state.searchGlobal) {
         el.innerHTML =
           '<div class="empty">' +
             '<h3>Cap coincidència aquí</h3>' +
             '<p>No s\'han trobat arxius amb aquesta cerca dins d\'aquesta vista.</p>' +
-            '<p style="margin-top:12px"><button class="btn primary" id="btn-empty-global">Cercar a totes les assignatures</button></p>' +
+            '<p style="margin-top:12px"><button class="btn primary" id="btn-empty-global">Cercar a tot arreu</button></p>' +
+          '</div>';
+      } else if (state.view === "subject" && state.subjectTab === "personal" && !state.query && state.kind === "all") {
+        el.innerHTML =
+          '<div class="empty">' +
+            '<h3>Encara no tens arxius propis aquí</h3>' +
+            '<p>Fes servir «✎ Editar còpia» en qualsevol arxiu d\'Atenea o desa els teus documents directament a la carpeta de l\'assignatura.</p>' +
           '</div>';
       } else if (state.view === "favs" && state.favs.size === 0 && !state.query && state.kind === "all") {
         el.innerHTML = '<div class="empty"><h3>Cap arxiu preferit</h3><p>Marca la ★ de qualsevol arxiu per tenir-lo sempre a mà.</p></div>';
@@ -1240,7 +1327,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{
     if (isGlobalSearchActive()) {
       var globalSorted = sortFiles(visibleFiles);
       el.innerHTML = '<div class="flat-list">' +
-        globalSorted.map(function(f){ return renderFileRow(f, { showSubject: true, showSection: true, showSubpath: true }); }).join("") +
+        globalSorted.map(function(f){ return renderFileRow(f, { showSubject: true, showSection: true, showSubpath: true, showMineTag: true }); }).join("") +
       '</div>';
       return;
     }
@@ -1286,23 +1373,79 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{
               '<span class="sec-cnt">' + fmtNum(list.length) + '</span>' +
             '</div>' +
             '<div class="section-body">' +
-              list.map(function(f){ return renderFileRow(f, { showSection: true, showSubpath: true }); }).join("") +
+              list.map(function(f){ return renderFileRow(f, { showSection: true, showSubpath: true, showMineTag: true }); }).join("") +
             '</div>' +
           '</section>';
       });
+      var genFavs = bySubj.get("general");
+      if (genFavs && genFavs.length) {
+        genFavs = sortFiles(genFavs);
+        var gName = (DATA.personalGeneral && DATA.personalGeneral.label) ? DATA.personalGeneral.label : "General (UNI)";
+        html +=
+          '<section class="section-card" style="--c:var(--accent)">' +
+            '<div class="section-head" style="cursor:default">' +
+              '<span class="subj-dot"></span>' +
+              '<span class="sec-name">' + esc(gName) + '</span>' +
+              '<span class="sec-cnt">' + fmtNum(genFavs.length) + '</span>' +
+            '</div>' +
+            '<div class="section-body">' +
+              genFavs.map(function(f){ return renderFileRow(f, { showSection: true, showSubpath: true, showMineTag: true }); }).join("") +
+            '</div>' +
+          '</section>';
+      }
       el.innerHTML = html;
       return;
     }
 
+    if (state.view === "general") {
+      var genSorted = sortFiles(visibleFiles);
+      el.innerHTML = '<div class="flat-list">' +
+        genSorted.map(function(f){ return renderFileRow(f, { showSection: true, showSubpath: true }); }).join("") +
+      '</div>';
+      return;
+    }
+
     if (state.view === "subject" && state.sort === "atenea" && subjMap[state.subjectId]) {
-      el.innerHTML = renderSubjectTree(visibleFiles, subjMap[state.subjectId]);
+      var curSubj = subjMap[state.subjectId];
+      var hasTabs = !!(curSubj.hasPersonalDir || curSubj.personalCount > 0);
+      if (hasTabs && state.subjectTab === "personal") {
+        el.innerHTML = '<div class="flat-list">' +
+          visibleFiles.map(function(f){ return renderFileRow(f, { showSection: true, showSubpath: true }); }).join("") +
+        '</div>';
+        return;
+      }
+      if (hasTabs && state.subjectTab === "all") {
+        var myFiles = visibleFiles.filter(function(f){ return f.origin === "personal"; });
+        var profFiles = visibleFiles.filter(function(f){ return f.origin !== "personal"; });
+        var outHtml = "";
+        if (myFiles.length) {
+          var forceExp = !!(state.query.trim() || state.kind !== "all");
+          var pKey = curSubj.id + "::personal";
+          var pCol = isNodeCollapsed(pKey, myFiles.length, forceExp);
+          outHtml +=
+            '<section class="section-card' + (pCol ? ' collapsed' : '') + '" style="--c:' + esc(subjectColor(curSubj)) + '">' +
+              '<button class="section-head" type="button" data-toggle="' + esc(pKey) + '">' +
+                '<span class="chev">▾</span>' +
+                '<span class="sec-name">Els meus arxius</span>' +
+                '<span class="sec-cnt">' + fmtNum(myFiles.length) + '</span>' +
+              '</button>' +
+              '<div class="section-body">' +
+                myFiles.map(function(f){ return renderFileRow(f, { showSection: true, showSubpath: true, showMineTag: true }); }).join("") +
+              '</div>' +
+            '</section>';
+        }
+        outHtml += renderSubjectTree(profFiles, curSubj);
+        el.innerHTML = outHtml;
+        return;
+      }
+      el.innerHTML = renderSubjectTree(visibleFiles, curSubj);
       return;
     }
 
     var sorted = sortFiles(visibleFiles);
     var showSubj = (state.view !== "subject");
     el.innerHTML = '<div class="flat-list">' +
-      sorted.map(function(f){ return renderFileRow(f, { showSubject: showSubj, showSection: true, showSubpath: true }); }).join("") +
+      sorted.map(function(f){ return renderFileRow(f, { showSubject: showSubj, showSection: true, showSubpath: true, showMineTag: true }); }).join("") +
     '</div>';
   }
 
@@ -1321,18 +1464,23 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{
     }
 
     var subj = subjMap[f.subjectId];
-    var c = subjectColor(subj);
-    var isStar = state.favs.has(f.rel);
-    var openHref = (f.kind === "url" && f.targetUrl) ? f.targetUrl : f.href;
+    var isPersonal = f.origin === "personal";
+    var c = (isPersonal && f.sourceId === "general") ? "var(--accent)" : subjectColor(subj);
+    var isStar = state.favs.has(fileKey(f));
+    var fHref = fileUrl(f);
+    var openHref = (f.kind === "url" && f.targetUrl) ? f.targetUrl : fHref;
     var openRel = (f.kind === "url") ? "noopener noreferrer" : "noopener";
     var crumb = [cleanSectionName(f.section)].concat(f.subpath || []).filter(Boolean).join(" / ");
+    var badgeLabel = subj ? subj.name : (isPersonal && f.sourceId === "general" && DATA.personalGeneral ? (DATA.personalGeneral.label || "General (UNI)") : "");
+    var canFork = IS_SERVER && !isPersonal && f.kind !== "url" && subj && subj.hasPersonalDir;
 
     head.style.setProperty("--c", c);
     head.innerHTML =
       '<div class="pv-top">' +
         '<div class="pv-meta">' +
           '<div class="pv-crumb">' +
-            (subj ? '<span class="pv-subj">' + esc(subj.name) + '</span>' : '') +
+            (badgeLabel ? '<span class="pv-subj">' + esc(badgeLabel) + '</span>' : '') +
+            (isPersonal ? '<span class="tag tag-mine">Meu</span>' : '') +
             (crumb ? '<span title="' + esc(crumb) + '">' + esc(crumb) + '</span>' : '') +
           '</div>' +
           '<h3 class="pv-title">' + esc(displayFileName(f)) + '</h3>' +
@@ -1345,6 +1493,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{
       '<div class="pv-acts">' +
         '<a class="btn primary" href="' + esc(openHref) + '" target="_blank" rel="' + openRel + '">Obrir en pestanya ↗</a>' +
         '<button class="btn" id="pv-copy">Copiar ruta</button>' +
+        (canFork ? '<button class="btn" id="pv-fork" title="Crea una còpia editable a la teva carpeta personal">Editar còpia</button>' : '') +
         (IS_SERVER
           ? '<button class="btn" id="pv-open">Obrir al sistema</button>' +
             '<button class="btn" id="pv-reveal">Carpeta</button>'
@@ -1352,19 +1501,22 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{
         '<button class="btn" id="pv-star">' + (isStar ? '★ Preferit' : '☆ Preferit') + '</button>' +
       '</div>';
 
-    var htmlContent = (DATA.htmlContents && DATA.htmlContents[f.rel]) || null;
-    var textContent = (DATA.textContents && Object.prototype.hasOwnProperty.call(DATA.textContents, f.rel)) ? DATA.textContents[f.rel] : null;
+    var k = fileKey(f);
+    var htmlContent = (DATA.htmlContents && DATA.htmlContents[k]) || null;
+    var textContent = (DATA.textContents && Object.prototype.hasOwnProperty.call(DATA.textContents, k)) ? DATA.textContents[k] : null;
 
     if (f.kind === "pdf") {
-      body.innerHTML = '<iframe class="pv-frame" src="' + esc(f.href) + '" title="' + esc(f.name) + '"></iframe>';
+      body.innerHTML = '<iframe class="pv-frame" src="' + esc(fHref) + '" title="' + esc(f.name) + '"></iframe>';
     } else if (f.kind === "image") {
-      body.innerHTML = '<div class="pv-media"><img src="' + esc(f.href) + '" alt="' + esc(f.name) + '"></div>';
+      body.innerHTML = '<div class="pv-media"><img src="' + esc(fHref) + '" alt="' + esc(f.name) + '"></div>';
     } else if (f.kind === "video") {
       body.innerHTML =
         '<div class="pv-media">' +
-          '<video controls preload="metadata" src="' + esc(f.href) + '"></video>' +
+          '<video controls preload="metadata" src="' + esc(fHref) + '"></video>' +
           '<p class="pv-note">Si el navegador no reprodueix el còdec (p. ex. .mpeg o .avi), fes servir «Obrir al sistema» o «Obrir en pestanya».</p>' +
         '</div>';
+    } else if (f.kind === "html" && isPersonal) {
+      body.innerHTML = '<iframe class="pv-frame" src="' + esc(fHref) + '" title="' + esc(f.name) + '"></iframe>';
     } else if (f.kind === "html" && htmlContent != null) {
       var dark = isDarkTheme();
       var wrapped = '<!DOCTYPE html><html lang="ca"><head><meta charset="utf-8"><style>' +
@@ -1400,7 +1552,8 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{
             (IS_SERVER
               ? '<button class="btn primary" id="pv-card-open">Obrir al sistema</button>' +
                 '<button class="btn" id="pv-card-reveal">Mostrar a la carpeta</button>'
-              : '<a class="btn primary" href="' + esc(f.href) + '" target="_blank" rel="noopener">Obrir / Descarregar</a>') +
+              : '<a class="btn primary" href="' + esc(fHref) + '" target="_blank" rel="noopener">Obrir / Descarregar</a>') +
+            (canFork ? '<button class="btn" id="pv-card-fork">Editar còpia</button>' : '') +
             '<button class="btn" id="pv-card-copy">Copiar ruta</button>' +
           '</div>' +
         '</div>';
@@ -1434,14 +1587,40 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{
   }
 
   function openInSystem(f){
-    apiPost("/api/open", { path: f.rel }).then(function(res){
+    apiPost("/api/open", { path: f.rel, origin: f.origin || "atenea", sourceId: f.sourceId || "" }).then(function(res){
       if (!res.ok) showToast("Error: " + (res.data.error || "no s'ha pogut obrir"));
     }).catch(function(){ showToast("No s'ha pogut connectar amb el servidor"); });
   }
 
   function revealInExplorer(f){
-    apiPost("/api/reveal", { path: f.rel }).then(function(res){
+    apiPost("/api/reveal", { path: f.rel, origin: f.origin || "atenea", sourceId: f.sourceId || "" }).then(function(res){
       if (!res.ok) showToast("Error: " + (res.data.error || "no s'ha pogut obrir"));
+    }).catch(function(){ showToast("No s'ha pogut connectar amb el servidor"); });
+  }
+
+  function refreshCatalog(toastMsg){
+    return fetch("/api/catalog", { cache: "no-store" })
+      .then(function(r){ return r.json(); })
+      .then(function(cat){
+        DATA = cat;
+        window.ATENEA_DATA = cat;
+        rebuildIndexes();
+        render();
+        if (toastMsg) showToast(toastMsg);
+      })
+      .catch(function(){ showToast("No s'ha pogut actualitzar l'índex"); });
+  }
+
+  function copyToPersonal(f){
+    apiPost("/api/copy-to-personal", { path: f.rel, open: true }).then(function(res){
+      if (!res.ok) {
+        showToast("Error: " + (res.data.error || "no s'ha pogut copiar"));
+        return;
+      }
+      var msg = res.data.existed
+        ? "Ja existia la còpia als meus arxius — oberta"
+        : "Copiat als meus arxius i obert";
+      refreshCatalog(msg);
     }).catch(function(){ showToast("No s'ha pogut connectar amb el servidor"); });
   }
 
@@ -1505,6 +1684,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{
         var pill = document.getElementById("mode-pill");
         pill.textContent = "Servidor";
         pill.classList.add("live");
+        document.getElementById("refresh-btn").style.display = "";
         document.getElementById("sync-btn").style.display = "";
         document.getElementById("sb-foot").style.display = "none";
         if (info.syncing) {
@@ -1544,8 +1724,9 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{
   }
 
   function toggleStar(f){
-    if (state.favs.has(f.rel)) state.favs.delete(f.rel);
-    else state.favs.add(f.rel);
+    var k = fileKey(f);
+    if (state.favs.has(k)) state.favs.delete(k);
+    else state.favs.add(k);
     saveFavs();
     render();
   }
@@ -1584,6 +1765,9 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{
     render();
   });
 
+  document.getElementById("refresh-btn").addEventListener("click", function(){
+    refreshCatalog("Índex actualitzat");
+  });
   document.getElementById("sync-btn").addEventListener("click", triggerSync);
   document.getElementById("menu-btn").addEventListener("click", function(){ toggleMobileMenu(true); });
   document.getElementById("backdrop").addEventListener("click", function(){ toggleMobileMenu(false); });
@@ -1616,6 +1800,12 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{
   });
 
   document.getElementById("view-bar").addEventListener("click", function(ev){
+    var stabBtn = ev.target.closest(".subj-tab[data-stab]");
+    if (stabBtn) {
+      state.subjectTab = stabBtn.getAttribute("data-stab");
+      render();
+      return;
+    }
     var winBtn = ev.target.closest(".chip[data-win]");
     if (winBtn) {
       state.recentWindow = winBtn.getAttribute("data-win");
@@ -1695,6 +1885,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{
       ev.stopPropagation();
       if (act === "star") toggleStar(f);
       else if (act === "copy") copyText(windowsFullPath(f), "Ruta copiada");
+      else if (act === "fork") copyToPersonal(f);
       else if (act === "open") openInSystem(f);
       else if (act === "reveal") revealInExplorer(f);
       return;
@@ -1727,6 +1918,8 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{
     if (!f) return;
     if (ev.target.id === "pv-copy" || ev.target.id === "pv-card-copy") {
       copyText(windowsFullPath(f), "Ruta copiada");
+    } else if (ev.target.id === "pv-fork" || ev.target.id === "pv-card-fork") {
+      copyToPersonal(f);
     } else if (ev.target.id === "pv-star") {
       toggleStar(f);
     } else if (ev.target.id === "pv-open" || ev.target.id === "pv-card-open") {

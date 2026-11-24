@@ -15,6 +15,8 @@ import json
 import mimetypes
 import os
 import re
+import shutil
+import stat
 import subprocess
 import sys
 import threading
@@ -30,7 +32,9 @@ from pathlib import Path
 import build_index
 
 ROOT = Path(__file__).resolve().parent
+ROOT_RESOLVED = ROOT.resolve()
 DOCS_DIR = (ROOT / "Assignatures").resolve()
+BLOCKED_PERSONAL_NAMES = {"config.json", "sync.log", "ui_state.json", "personal_sources.json"}
 INDEX_FILE = ROOT / "index.html"
 ICON_FILE = ROOT / "atenea.ico"
 CATALOG_FILE = ROOT / "catalog.js"
@@ -62,6 +66,8 @@ EXTRA_MIME_TYPES = {
     ".dat": "text/plain; charset=utf-8",
     ".md": "text/plain; charset=utf-8",
     ".csv": "text/csv; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+    ".js": "application/javascript; charset=utf-8",
     ".json": "application/json; charset=utf-8",
     ".ipynb": "application/json; charset=utf-8",
 }
@@ -98,6 +104,34 @@ def resolve_doc_path(rel_path: str, *, unquote: bool = False) -> Path | None:
     if not candidate.is_relative_to(DOCS_DIR):
         return None
     if not candidate.is_file():
+        return None
+    return candidate
+
+
+def resolve_personal_path(source_id: str, rel_path: str, *, unquote: bool = False) -> Path | None:
+    """Resol una ruta dins d'una carpeta personal configurada rebutjant traversal i secrets."""
+    if not source_id or not rel_path:
+        return None
+    personal = build_index.load_personal_sources()
+    if source_id == "general":
+        entry = personal.get("general")
+    else:
+        entry = personal.get("subjects", {}).get(source_id)
+    if not entry:
+        return None
+
+    raw = urllib.parse.unquote(rel_path) if unquote else rel_path
+    if not raw or raw.startswith(("/", "\\")) or "\x00" in raw or "\\" in raw or ":" in raw:
+        return None
+    parts = raw.split("/")
+    if any(p in ("", ".", "..") or p.startswith(".") for p in parts):
+        return None
+
+    base_resolved = entry["dir"].resolve()
+    candidate = base_resolved.joinpath(*parts).resolve()
+    if not candidate.is_relative_to(base_resolved) or not candidate.is_file():
+        return None
+    if candidate.is_relative_to(ROOT_RESOLVED) or candidate.name.lower() in BLOCKED_PERSONAL_NAMES:
         return None
     return candidate
 
@@ -341,9 +375,8 @@ class AteneaHandler(BaseHTTPRequestHandler):
             return
 
         if req_path == "/catalog.js":
-            if not CATALOG_FILE.exists():
-                with catalog_lock:
-                    build_index.write_catalog()
+            with catalog_lock:
+                build_index.write_catalog()
             self._send_bytes(HTTPStatus.OK, CATALOG_FILE.read_bytes(), "application/javascript; charset=utf-8")
             return
 
@@ -379,6 +412,20 @@ class AteneaHandler(BaseHTTPRequestHandler):
             self._serve_doc_file(target)
             return
 
+        if req_path.startswith("/personal/"):
+            rest = req_path[len("/personal/"):]
+            if "/" not in rest:
+                self._send_json(HTTPStatus.NOT_FOUND, {"ok": False, "error": "Arxiu no trobat"})
+                return
+            source_id_enc, rel_enc = rest.split("/", 1)
+            source_id = urllib.parse.unquote(source_id_enc)
+            target = resolve_personal_path(source_id, rel_enc, unquote=True)
+            if target is None:
+                self._send_json(HTTPStatus.NOT_FOUND, {"ok": False, "error": "Arxiu no trobat"})
+                return
+            self._serve_doc_file(target)
+            return
+
         self._send_json(HTTPStatus.NOT_FOUND, {"ok": False, "error": "No trobat"})
 
     def do_POST(self) -> None:
@@ -395,7 +442,10 @@ class AteneaHandler(BaseHTTPRequestHandler):
             if not isinstance(rel, str):
                 self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": "Falta el camp path"})
                 return
-            target = resolve_doc_path(rel, unquote=False)
+            if body.get("origin") == "personal" and isinstance(body.get("sourceId"), str):
+                target = resolve_personal_path(body["sourceId"], rel, unquote=False)
+            else:
+                target = resolve_doc_path(rel, unquote=False)
             if target is None:
                 self._send_json(HTTPStatus.NOT_FOUND, {"ok": False, "error": "Arxiu no trobat"})
                 return
@@ -408,6 +458,56 @@ class AteneaHandler(BaseHTTPRequestHandler):
                 self._send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"ok": False, "error": str(exc)})
                 return
             self._send_json(HTTPStatus.OK, {"ok": True})
+            return
+
+        if req_path == "/api/copy-to-personal":
+            body = self._read_json_body()
+            rel = body.get("path") if body else None
+            if not isinstance(rel, str):
+                self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": "Falta el camp path"})
+                return
+            source = resolve_doc_path(rel, unquote=False)
+            if source is None:
+                self._send_json(HTTPStatus.NOT_FOUND, {"ok": False, "error": "Arxiu d'Atenea no trobat"})
+                return
+            subj_id = build_index.resolve_subject_meta(rel.split("/")[0])[0]
+            p_cfg = build_index.load_personal_sources()
+            entry = p_cfg.get("subjects", {}).get(subj_id)
+            if not entry:
+                self._send_json(
+                    HTTPStatus.BAD_REQUEST,
+                    {"ok": False, "error": "No hi ha carpeta personal configurada per a aquesta assignatura"},
+                )
+                return
+            dest_dir = entry["dir"].resolve()
+            dest = (dest_dir / source.name).resolve()
+            if not dest.is_relative_to(dest_dir):
+                self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": "Ruta de destí invàlida"})
+                return
+            try:
+                if dest.exists():
+                    existed = True
+                else:
+                    existed = False
+                    shutil.copy2(source, dest)
+                    os.chmod(dest, dest.stat().st_mode | stat.S_IWRITE | stat.S_IREAD)
+                with catalog_lock:
+                    build_index.write_catalog()
+                if body.get("open", True):
+                    os.startfile(str(dest))
+            except Exception as exc:
+                self._send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"ok": False, "error": str(exc)})
+                return
+            self._send_json(
+                HTTPStatus.OK,
+                {
+                    "ok": True,
+                    "existed": existed,
+                    "destName": dest.name,
+                    "destPath": str(dest),
+                    "favKey": f"personal:{subj_id}/{dest.name}",
+                },
+            )
             return
 
         if req_path == "/api/ui-state":
